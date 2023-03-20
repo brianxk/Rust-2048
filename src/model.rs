@@ -1,26 +1,51 @@
-use rand::{Rng, distributions::WeightedIndex, prelude::Distribution};
+use rand::{distributions::WeightedIndex, prelude::Distribution};
 
-// Board constants
 const BOARD_DIMENSION: usize = 4;
-const EMPTY_SLOT: u32 = 0;
-
-// 2-tiles should outnumber 4-tiles 4:1
-const NEW_TILE_CHOICES: [u32; 2] = [2, 4];
-const NEW_TILE_WEIGHTS: [u8; 2] = [4, 1];
 
 pub struct Game {
-    board: [[u32; BOARD_DIMENSION]; BOARD_DIMENSION],
+    board: [[Option<u32>; BOARD_DIMENSION]; BOARD_DIMENSION],
+    new_tile_params: NewTileParams,
+}
+
+struct NewTileParams {
+    tile_choices: [u32; 2],
+    tile_weights: [u8; 2],
+}
+
+impl NewTileParams {
+    const TWO: usize = 0;
+    const FOUR: usize = 1;
+
+    fn new() -> Self {
+        NewTileParams {
+            tile_choices: [2, 4],
+            tile_weights: [4, 1],
+        }
+    }
 }
 
 impl Game {
     /// Generates a new game board in a ready-to-play state.
-    /// This means that the board will be empty except for two starting tiles.
+    ///
+    /// This means that the board will be empty save for two starting tiles.
     ///
     /// The two tiles will either both be 2's or one 2 and one 4, always in random positions.
     pub fn new() -> Game {
         let game = Game {
-            board: [[EMPTY_SLOT; BOARD_DIMENSION]; BOARD_DIMENSION],
+            board: [[None; BOARD_DIMENSION]; BOARD_DIMENSION],
+            new_tile_params: NewTileParams::new(),
         };
+
+        // If 1st tile is 4, 2nd tile must be 2.
+        // If 1st tile is 2, 2nd tile may either be 2 or 4.
+        let first_tile = game.generate_tile();
+        let second_tile;
+        
+        if first_tile == game.new_tile_params.tile_choices[NewTileParams::FOUR] {
+            second_tile = game.new_tile_params.tile_choices[NewTileParams::TWO];
+        } else {
+            second_tile = game.generate_tile();
+        }
 
         // First tile coordinates
         // let row = rng.gen_range(0..BOARD_DIMENSION);
@@ -29,12 +54,12 @@ impl Game {
         game
     }
 
-    // Generates a new tile - either 2 or 4 according to pre-defined weighted probability
-    pub fn generate_tile() -> u32 {
+    /// Generates a new tile - either 2 or 4 according to pre-defined weighted probability
+    pub fn generate_tile(&self) -> u32 {
         let mut rng = rand::thread_rng();
-        let dist = WeightedIndex::new(&NEW_TILE_WEIGHTS).unwrap();
+        let dist = WeightedIndex::new(self.new_tile_params.tile_weights).unwrap();
 
-        let tile = NEW_TILE_CHOICES[dist.sample(&mut rng)];
+        let tile = self.new_tile_params.tile_choices[dist.sample(&mut rng)];
 
         tile
     }
@@ -53,6 +78,7 @@ mod tests {
 
     #[test]
     fn test_new_tile_rng() {
+        let game = Game::new();
         let num_trials = 100;
 
         for i in 0..num_trials {
@@ -64,11 +90,11 @@ mod tests {
             const TEST_SAMPLE_SIZE: u32 = 10000;
 
             for _ in 0..TEST_SAMPLE_SIZE {
-                let tile = Game::generate_tile();
+                let tile = game.generate_tile();
 
-                if tile == 2 {
+                if tile == game.new_tile_params.tile_choices[NewTileParams::TWO] {
                     two_count += 1;
-                } else if tile == 4 {
+                } else {
                     four_count += 1;
                 }
             }
@@ -76,7 +102,7 @@ mod tests {
             let two_dist = two_count as f32 / TEST_SAMPLE_SIZE as f32;
             let four_dist = four_count as f32 / TEST_SAMPLE_SIZE as f32;
 
-            let expected_ratio = NEW_TILE_WEIGHTS[0] as f32;
+            let expected_ratio = game.new_tile_params.tile_weights[NewTileParams::TWO] as f32;
             let actual_ratio = two_dist / four_dist;
 
             // Run `cargo test -- --nocapture` to show stdout
@@ -84,8 +110,7 @@ mod tests {
             println!("Actual 2:4 ratio: {actual_ratio}:1");
             
             let error_margin = expected_ratio * 0.20;
-
-            let expected_ratio_range = (expected_ratio - error_margin)..(expected_ratio + error_margin);
+            let expected_ratio_range = (expected_ratio - error_margin)..=(expected_ratio + error_margin);
 
             assert!(expected_ratio_range.contains(&actual_ratio));
         }
