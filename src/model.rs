@@ -87,7 +87,7 @@ impl Game {
                 if let None = self.board[row][col] {
                     self.free_slots.push((row, col));
 
-                    println!("{:?}", self.free_slots);
+                    // println!("{:?}", self.free_slots);
                 }
             }
         }
@@ -102,8 +102,14 @@ impl Game {
 
     /// Prints a text representation of the game board to stdout.
     pub fn print_board(&self) {
-        for row in self.board {
-            println!("{:?}", row);
+        for row in 0..BOARD_DIMENSION {
+            for col in 0..BOARD_DIMENSION {
+                match self.board[row][col] {
+                    Some(u) => print!("{u:^10}"),
+                    None => print!("{:^10}", '-'),
+                }
+            }
+            println!();
         }
     }
 }
