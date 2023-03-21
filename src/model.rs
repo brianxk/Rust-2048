@@ -1,4 +1,4 @@
-use rand::{distributions::WeightedIndex, prelude::Distribution, Rng};
+use rand::{distributions::WeightedIndex, prelude::Distribution, Rng, seq::SliceRandom};
 
 const BOARD_DIMENSION: usize = 4;
 
@@ -57,10 +57,10 @@ impl Game {
             second_tile = game.generate_tile();
         }
 
-        let first_tile_pos = game.get_free_tile();
+        let first_tile_pos = game.get_free_tile().expect("New game board, should not panic.");
         game.board[first_tile_pos.0][first_tile_pos.1] = Some(first_tile);
 
-        let second_tile_pos = game.get_free_tile();
+        let second_tile_pos = game.get_free_tile().expect("New game board, should not panic.");
         game.board[second_tile_pos.0][second_tile_pos.1] = Some(second_tile);
 
         game
@@ -78,7 +78,7 @@ impl Game {
     }
 
     /// Returns the coordinates of a free board slot at random. 
-    pub fn get_free_tile(&mut self) -> (usize, usize) {
+    pub fn get_free_tile(&mut self) -> Option<(usize, usize)> {
         // Update vector of free slots
         self.free_slots.clear();
 
@@ -86,18 +86,13 @@ impl Game {
             for col in 0..BOARD_DIMENSION {
                 if let None = self.board[row][col] {
                     self.free_slots.push((row, col));
-
-                    // println!("{:?}", self.free_slots);
                 }
             }
         }
 
         let mut rng = rand::thread_rng();
 
-        let row = rng.gen_range(0..BOARD_DIMENSION);
-        let col = rng.gen_range(0..BOARD_DIMENSION);
-        
-        (0, 0)
+        self.free_slots.choose(&mut rng).copied()
     }
 
     /// Prints a text representation of the game board to stdout.
