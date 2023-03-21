@@ -1,27 +1,32 @@
-use rand::{distributions::WeightedIndex, prelude::Distribution};
+use rand::{distributions::WeightedIndex, prelude::Distribution, Rng};
 
 const BOARD_DIMENSION: usize = 4;
 
 pub struct Game {
     board: [[Option<u32>; BOARD_DIMENSION]; BOARD_DIMENSION],
     new_tile_params: NewTileParams,
+    free_slots: Vec<(usize, usize)>,
 }
 
+/// Struct that holds the choices for new tiles and the probability with which they will appear.
 struct NewTileParams {
     tile_choices: [u32; 2],
     tile_weights: [u8; 2],
 }
 
 impl NewTileParams {
-    // Constants that represent the index positions of 2 and 4 respectively.
-    // Code that accesses the `tile_choices` and `tile_weights` arrays should use these constants
-    // as indices.
+    /// Represents the index position for accessing parameters related to 2-tiles in the
+    /// `tile_choices` and `tile_weights` arrays.
     const TWO: usize = 0;
+    
+    /// Represents the index position for accessing parameters related to 4-tiles in the
+    /// `tile_choices` and `tile_weights` arrays.
     const FOUR: usize = 1;
 
+    /// Initializes the default settings for new tile creation such that 2-tiles appear more
+    /// frequently than 4-tiles at a 4:1 ratio.
     fn new() -> Self {
         NewTileParams {
-            // Probability of 2-tile vs. 4-tile should be roughly 4:1
             tile_choices: [2, 4],
             tile_weights: [4, 1],
         }
@@ -35,13 +40,14 @@ impl Game {
     ///
     /// The two tiles will either both be 2's or one 2 and one 4, always in random positions.
     pub fn new() -> Game {
-        let game = Game {
+        let mut game = Game {
             board: [[None; BOARD_DIMENSION]; BOARD_DIMENSION],
             new_tile_params: NewTileParams::new(),
+            free_slots: Vec::with_capacity(BOARD_DIMENSION * BOARD_DIMENSION),
         };
 
-        // If 1st tile is 4, 2nd tile must be 2.
-        // If 1st tile is 2, 2nd tile may either be 2 or 4.
+        // If first tile is 4, second tile must be 2.
+        // If first tile is 2, second tile may either be 2 or 4.
         let first_tile = game.generate_tile();
         let second_tile;
         
@@ -51,14 +57,17 @@ impl Game {
             second_tile = game.generate_tile();
         }
 
-        // First tile coordinates
-        let row = rng.gen_range(0..BOARD_DIMENSION);
-        let col = rng.gen_range(0..BOARD_DIMENSION);
+        let first_tile_pos = game.get_free_tile();
+        game.board[first_tile_pos.0][first_tile_pos.1] = Some(first_tile);
+
+        let second_tile_pos = game.get_free_tile();
+        game.board[second_tile_pos.0][second_tile_pos.1] = Some(second_tile);
 
         game
     }
 
-    /// Generates a new tile - either 2 or 4 according to pre-defined weighted probability
+    /// Generates a new tile - either 2 or 4 according to the weights defined in
+    /// `self.NewTileParams`
     pub fn generate_tile(&self) -> u32 {
         let mut rng = rand::thread_rng();
         let dist = WeightedIndex::new(self.new_tile_params.tile_weights).unwrap();
@@ -66,6 +75,29 @@ impl Game {
         let tile = self.new_tile_params.tile_choices[dist.sample(&mut rng)];
 
         tile
+    }
+
+    /// Returns the coordinates of a free board slot at random. 
+    pub fn get_free_tile(&mut self) -> (usize, usize) {
+        // Update vector of free slots
+        self.free_slots.clear();
+
+        for row in 0..BOARD_DIMENSION {
+            for col in 0..BOARD_DIMENSION {
+                if let None = self.board[row][col] {
+                    self.free_slots.push((row, col));
+
+                    println!("{:?}", self.free_slots);
+                }
+            }
+        }
+
+        let mut rng = rand::thread_rng();
+
+        let row = rng.gen_range(0..BOARD_DIMENSION);
+        let col = rng.gen_range(0..BOARD_DIMENSION);
+        
+        (0, 0)
     }
 
     /// Prints a text representation of the game board to stdout.
