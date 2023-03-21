@@ -13,11 +13,15 @@ struct NewTileParams {
 }
 
 impl NewTileParams {
+    // Constants that represent the index positions of 2 and 4 respectively.
+    // Code that accesses the `tile_choices` and `tile_weights` arrays should use these constants
+    // as indices.
     const TWO: usize = 0;
     const FOUR: usize = 1;
 
     fn new() -> Self {
         NewTileParams {
+            // Probability of 2-tile vs. 4-tile should be roughly 4:1
             tile_choices: [2, 4],
             tile_weights: [4, 1],
         }
@@ -48,8 +52,8 @@ impl Game {
         }
 
         // First tile coordinates
-        // let row = rng.gen_range(0..BOARD_DIMENSION);
-        // let col = rng.gen_range(0..BOARD_DIMENSION);
+        let row = rng.gen_range(0..BOARD_DIMENSION);
+        let col = rng.gen_range(0..BOARD_DIMENSION);
 
         game
     }
