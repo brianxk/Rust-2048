@@ -1,9 +1,9 @@
-use rand::{distributions::WeightedIndex, prelude::Distribution, Rng, seq::SliceRandom};
+use rand::{distributions::WeightedIndex, prelude::Distribution, seq::SliceRandom};
 
 const BOARD_DIMENSION: usize = 4;
 
 pub struct Game {
-    board: [[Option<u32>; BOARD_DIMENSION]; BOARD_DIMENSION],
+    pub board: [[Option<u32>; BOARD_DIMENSION]; BOARD_DIMENSION],
     new_tile_params: NewTileParams,
     free_slots: Vec<(usize, usize)>,
 }
@@ -57,17 +57,17 @@ impl Game {
             second_tile = game.generate_tile();
         }
 
-        let first_tile_pos = game.get_free_tile().expect("New game board, should not panic.");
+        let first_tile_pos = game.get_random_free_slot().expect("New game board, should not panic.");
         game.board[first_tile_pos.0][first_tile_pos.1] = Some(first_tile);
 
-        let second_tile_pos = game.get_free_tile().expect("New game board, should not panic.");
+        let second_tile_pos = game.get_random_free_slot().expect("New game board, should not panic.");
         game.board[second_tile_pos.0][second_tile_pos.1] = Some(second_tile);
 
         game
     }
 
     /// Generates a new tile - either 2 or 4 according to the weights defined in
-    /// `self.NewTileParams`
+    /// `self.new_tile_params`
     pub fn generate_tile(&self) -> u32 {
         let mut rng = rand::thread_rng();
         let dist = WeightedIndex::new(self.new_tile_params.tile_weights).unwrap();
@@ -77,9 +77,8 @@ impl Game {
         tile
     }
 
-    /// Returns the coordinates of a free board slot at random. 
-    pub fn get_free_tile(&mut self) -> Option<(usize, usize)> {
-        // Update vector of free slots
+    /// Updates the list of free slots.
+    fn update_free_slots(&mut self) {
         self.free_slots.clear();
 
         for row in 0..BOARD_DIMENSION {
@@ -89,6 +88,12 @@ impl Game {
                 }
             }
         }
+    }
+
+    /// Returns the coordinates of a free board slot at random. 
+    /// Will return `None` if no free slots exist, indicating the game is over.
+    pub fn get_random_free_slot(&mut self) -> Option<(usize, usize)> {
+        self.update_free_slots();
 
         let mut rng = rand::thread_rng();
 
@@ -114,6 +119,8 @@ mod tests {
     use super::*;
 
     #[test]
+    /// Ensure that the generation of 2-tiles outnumbers the generation of 4-tiles 4:1 given a
+    /// sufficiently large sample size and across multiple trials.
     fn test_new_tile_rng() {
         let game = Game::new();
         let num_trials = 100;
@@ -124,9 +131,9 @@ mod tests {
             let mut two_count = 0;
             let mut four_count = 0;
 
-            const TEST_SAMPLE_SIZE: u32 = 10000;
+            const SAMPLE_SIZE: u32 = 10000;
 
-            for _ in 0..TEST_SAMPLE_SIZE {
+            for _ in 0..SAMPLE_SIZE {
                 let tile = game.generate_tile();
 
                 if tile == game.new_tile_params.tile_choices[NewTileParams::TWO] {
@@ -136,8 +143,8 @@ mod tests {
                 }
             }
 
-            let two_dist = two_count as f32 / TEST_SAMPLE_SIZE as f32;
-            let four_dist = four_count as f32 / TEST_SAMPLE_SIZE as f32;
+            let two_dist = two_count as f32 / SAMPLE_SIZE as f32;
+            let four_dist = four_count as f32 / SAMPLE_SIZE as f32;
 
             let expected_ratio = game.new_tile_params.tile_weights[NewTileParams::TWO] as f32;
             let actual_ratio = two_dist / four_dist;
@@ -150,6 +157,81 @@ mod tests {
             let expected_ratio_range = (expected_ratio - error_margin)..=(expected_ratio + error_margin);
 
             assert!(expected_ratio_range.contains(&actual_ratio));
+        }
+    }
+
+    #[test]
+    /// Ensure that the maintainance and random selection of free slots is working correctly. 
+    fn test_updating_and_randomly_selecting_free_slots() {
+        let mut game = Game::new();
+        const MAX_SLOTS: usize = 16;
+        const NUM_STARTING_TILES: usize = 2;
+
+        // Ensure that number of starting tiles is correct.
+        game.update_free_slots();
+        assert_eq!(game.free_slots.len(), MAX_SLOTS - NUM_STARTING_TILES);
+
+        // Fill all empty slots with placeholders.
+        for _ in NUM_STARTING_TILES..MAX_SLOTS {
+            let coord = game.get_random_free_slot();
+
+            match coord {
+                Some((row, col)) => game.board[row][col] = Some(0),
+                None => panic!("Game board filled up unexpectedly.")
+            }
+        }
+
+        // Ensure that all board slots are filled.
+        game.update_free_slots();
+        assert_eq!(game.free_slots.len(), 0);
+
+        // Brute force assurance that all board slots are filled.
+        for row in 0..BOARD_DIMENSION {
+            for col in 0..BOARD_DIMENSION {
+                if let None = game.board[row][col] {
+                    panic!("Free board slots remain after filling with placeholders.");
+                }
+            }
+        }
+
+        // Ensure that attempting to obtain a free slot when the board is full returns `None`.
+        assert_eq!(game.get_random_free_slot(), None);
+    }
+
+    #[test]
+    /// A new game should:
+    ///
+    /// 1) Be empty save for two initial tiles.
+    /// 2) Have one 4-tile and one 2-tile -OR- two 2-tiles.
+    ///
+    /// Running multiple trials due the random nature of new game generation.
+    fn test_new_game() {
+        const NUM_STARTING_TILES: usize = 2;
+        let num_trials = 100;
+
+        for _ in 0..num_trials {
+            let game = Game::new();
+            let mut starting_tiles = Vec::new();
+
+            for row in 0..BOARD_DIMENSION {
+                for col in 0..BOARD_DIMENSION {
+                    if let Some(u) = game.board[row][col] {
+                        starting_tiles.push(u);
+                    }
+                }
+            }
+
+            // Check that number of starting tiles is correct.
+            assert_eq!(starting_tiles.len(), NUM_STARTING_TILES);
+            
+            // Check that starting tiles are valid.
+            assert!(game.new_tile_params.tile_choices.contains(&starting_tiles[0]));
+            assert!(game.new_tile_params.tile_choices.contains(&starting_tiles[1]));
+            
+            // Check condition 2)
+            if starting_tiles[0] == starting_tiles[1] {
+                assert_eq!(starting_tiles[0], game.new_tile_params.tile_choices[NewTileParams::TWO]);
+            }
         }
     }
 }
