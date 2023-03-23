@@ -3,9 +3,10 @@ use rand::{distributions::WeightedIndex, prelude::Distribution, seq::SliceRandom
 const BOARD_DIMENSION: usize = 4;
 
 pub struct Game {
-    pub board: [[Option<u32>; BOARD_DIMENSION]; BOARD_DIMENSION],
+    board: [[Option<u32>; BOARD_DIMENSION]; BOARD_DIMENSION],
     new_tile_params: NewTileParams,
     free_slots: Vec<(usize, usize)>,
+    pub score: u64,
 }
 
 /// Struct that holds the choices for new tiles and the probability with which they will appear.
@@ -33,6 +34,11 @@ impl NewTileParams {
     }
 }
 
+enum InputError {
+    InvalidDirectionError,
+    MovementNotPossibleError,
+}
+
 impl Game {
     /// Generates a new game board in a ready-to-play state.
     ///
@@ -44,6 +50,7 @@ impl Game {
             board: [[None; BOARD_DIMENSION]; BOARD_DIMENSION],
             new_tile_params: NewTileParams::new(),
             free_slots: Vec::with_capacity(BOARD_DIMENSION * BOARD_DIMENSION),
+            score: 0,
         };
 
         // If first tile is 4, second tile must be 2.
@@ -68,7 +75,7 @@ impl Game {
 
     /// Generates a new tile - either 2 or 4 according to the weights defined in
     /// `self.new_tile_params`
-    pub fn generate_tile(&self) -> u32 {
+    fn generate_tile(&self) -> u32 {
         let mut rng = rand::thread_rng();
         let dist = WeightedIndex::new(self.new_tile_params.tile_weights).unwrap();
 
@@ -92,7 +99,7 @@ impl Game {
 
     /// Returns the coordinates of a free board slot at random. 
     /// Will return `None` if no free slots exist, indicating the game is over.
-    pub fn get_random_free_slot(&mut self) -> Option<(usize, usize)> {
+    fn get_random_free_slot(&mut self) -> Option<(usize, usize)> {
         self.update_free_slots();
 
         let mut rng = rand::thread_rng();
@@ -112,6 +119,32 @@ impl Game {
             println!();
         }
     }
+
+    /// Receives the user's input.
+    /// Result will either return the updated score or an error.
+    /// Error can occur when the user's input is not a valid direction, or when movement is not
+    /// possible.
+    pub fn receive_input(&self, input: &String) -> Result<u64, InputError> {
+        match input.to_lowercase().trim() {
+            // "k" => println!("Up"),
+            // "j" => println!("Down"),
+            // "h" => println!("Left"),
+            // "l" => println!("Right"),
+            _ => Err(InputError::InvalidDirectionError),
+        }
+
+    }
+    // Player makes a move: L, R, U, D
+    // Game updates the board according to rules
+    // 1) Start from the direction of movement
+    // 2) Combine first, then move next tiles
+    // 3) Update score and display board (should main call print or should updated board be
+    //    returned?)
+    //
+    // Potential solutions:
+    // 1) Create a method which takes a direction and axis ( row vs. col ) and shifts/merges the 4
+    //    rows/columns in the prescribed direction
+
 }
 
 #[cfg(test)]
