@@ -34,7 +34,7 @@ impl NewTileParams {
     }
 }
 
-enum InputError {
+pub enum InputError {
     InvalidDirectionError,
     MovementNotPossibleError,
 }
@@ -126,10 +126,22 @@ impl Game {
     /// possible.
     pub fn receive_input(&self, input: &String) -> Result<u64, InputError> {
         match input.to_lowercase().trim() {
-            // "k" => println!("Up"),
-            // "j" => println!("Down"),
-            // "h" => println!("Left"),
-            // "l" => println!("Right"),
+            "k" => {
+                println!("Up");
+                Ok( 0 )
+            }
+            "j" => {
+                println!("Down");
+                Ok( 1 )
+            }
+            "h" => {
+                println!("Left");
+                Ok( 2 )
+            }
+            "l" => {
+                println!("Right");
+                Ok( 3 )
+            }
             _ => Err(InputError::InvalidDirectionError),
         }
 

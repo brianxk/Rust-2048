@@ -1,4 +1,5 @@
 use std::io;
+use std::io::{Write};
 
 mod model;
 
@@ -11,10 +12,15 @@ fn main() {
 
     loop {
         game.print_board();
-        println!("Enter your next move: ");
-        io::stdin().read_line(&mut user_selection).expect("Unable to read user input.");
+        print!("Enter your next move: ");
+        io::stdout().flush().expect("Error flushing output buffer.");
 
-        game.receive_input(&user_selection);
+        io::stdin().read_line(&mut user_selection).expect("Error reading user input.");
+
+        let points_scored = match game.receive_input(&user_selection) {
+            Ok(s) => (),
+            Err(e) => break,
+        };
 
         user_selection.clear();
     }
