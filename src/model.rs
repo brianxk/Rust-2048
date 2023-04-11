@@ -1,12 +1,20 @@
 use rand::{distributions::WeightedIndex, prelude::Distribution, seq::SliceRandom};
+use std::collections::LinkedList;
 
 const BOARD_DIMENSION: usize = 4;
+const NUM_TILES: usize = BOARD_DIMENSION * BOARD_DIMENSION;
+
+struct Tile {
+    value: u32,
+    id: u8,
+}
 
 pub struct Game {
-    board: [[Option<u32>; BOARD_DIMENSION]; BOARD_DIMENSION],
+    board: [[Option<Tile>; BOARD_DIMENSION]; BOARD_DIMENSION],
     new_tile_params: NewTileParams,
     free_slots: Vec<(usize, usize)>,
     pub score: u64,
+    tile_ids: LinkedList<u8>,
 }
 
 /// Struct that holds the choices for new tiles and the probability with which they will appear.
@@ -46,12 +54,22 @@ impl Game {
     ///
     /// The two tiles will either both be 2's or one 2 and one 4, always in random positions.
     pub fn new() -> Game {
+        const EMPTY_TILE: Option<Tile> = None;
+        const EMPTY_ROW: [Option<Tile>; BOARD_DIMENSION] = [EMPTY_TILE; BOARD_DIMENSION];
+        let tile_ids: [u8; NUM_TILES] = std::array::from_fn(|_| (0..NUM_TILES as u8).next().expect("Error generating array of u8 from 0..16"));
+
         let mut game = Game {
-            board: [[None; BOARD_DIMENSION]; BOARD_DIMENSION],
+            board: [EMPTY_ROW; BOARD_DIMENSION],
             new_tile_params: NewTileParams::new(),
             free_slots: Vec::with_capacity(BOARD_DIMENSION * BOARD_DIMENSION),
             score: 0,
+            tile_ids: LinkedList::from(tile_ids),
         };
+
+        // TO-DO: Remove this once you are done tseting 
+        for i in &game.tile_ids {
+            println!("ID: {i}");
+        }
 
         // If first tile is 4, second tile must be 2.
         // If first tile is 2, second tile may either be 2 or 4.
@@ -64,7 +82,19 @@ impl Game {
             second_tile = game.generate_tile();
         }
 
+        // Construct `Tile` structs from the randomly generated numbers
+        let first_tile = Tile {
+            value: first_tile,
+            id: *game.tile_ids.iter().next().expect("Error retrieving next tile ID."),
+        };
+
+        let second_tile = Tile {
+            value: second_tile,
+            id: *game.tile_ids.iter().next().expect("Error retrieving next tile ID."),
+        };
+
         let first_tile_pos = game.get_random_free_slot().expect("New game board, should not panic.");
+
         game.board[first_tile_pos.0][first_tile_pos.1] = Some(first_tile);
 
         let second_tile_pos = game.get_random_free_slot().expect("New game board, should not panic.");
@@ -111,8 +141,8 @@ impl Game {
     pub fn print_board(&self) {
         for row in 0..BOARD_DIMENSION {
             for col in 0..BOARD_DIMENSION {
-                match self.board[row][col] {
-                    Some(u) => print!("{u:^10}"),
+                match &self.board[row][col] {
+                    Some(u) => print!("{:^10}", u.value),
                     None => print!("{:^10}", '-'),
                 }
             }
@@ -144,6 +174,10 @@ impl Game {
             }
             _ => Err(InputError::InvalidDirectionError),
         }
+
+    }
+
+    fn shift_tiles(&self) {
 
     }
     // Player makes a move: L, R, U, D
@@ -209,20 +243,19 @@ mod tests {
     /// Ensure that the maintainance and random selection of free slots is working correctly. 
     fn test_updating_and_randomly_selecting_free_slots() {
         let mut game = Game::new();
-        const MAX_SLOTS: usize = 16;
         const NUM_STARTING_TILES: usize = 2;
 
         // Ensure that number of starting tiles is correct.
         game.update_free_slots();
-        assert_eq!(game.free_slots.len(), MAX_SLOTS - NUM_STARTING_TILES);
+        assert_eq!(game.free_slots.len(), NUM_TILES - NUM_STARTING_TILES);
 
         // Fill all empty slots with placeholders.
-        for _ in NUM_STARTING_TILES..MAX_SLOTS {
+        for _ in NUM_STARTING_TILES..NUM_TILES {
             let coord = game.get_random_free_slot();
 
             match coord {
-                Some((row, col)) => game.board[row][col] = Some(0),
-                None => panic!("Game board filled up unexpectedly.")
+                Some((row, col)) => game.board[row][col] = Some(Tile { value: 0, id: 0 }),
+                None => panic!("Game board filled up unexpectedly."),
             }
         }
 
@@ -260,7 +293,7 @@ mod tests {
 
             for row in 0..BOARD_DIMENSION {
                 for col in 0..BOARD_DIMENSION {
-                    if let Some(u) = game.board[row][col] {
+                    if let Some(u) = &game.board[row][col] {
                         starting_tiles.push(u);
                     }
                 }
@@ -270,12 +303,12 @@ mod tests {
             assert_eq!(starting_tiles.len(), NUM_STARTING_TILES);
             
             // Check that starting tiles are valid.
-            assert!(game.new_tile_params.tile_choices.contains(&starting_tiles[0]));
-            assert!(game.new_tile_params.tile_choices.contains(&starting_tiles[1]));
+            assert!(game.new_tile_params.tile_choices.contains(&starting_tiles[0].value));
+            assert!(game.new_tile_params.tile_choices.contains(&starting_tiles[1].value));
             
             // Check condition 2)
-            if starting_tiles[0] == starting_tiles[1] {
-                assert_eq!(starting_tiles[0], game.new_tile_params.tile_choices[NewTileParams::TWO]);
+            if starting_tiles[0].value == starting_tiles[1].value {
+                assert_eq!(starting_tiles[0].value, game.new_tile_params.tile_choices[NewTileParams::TWO]);
             }
         }
     }
