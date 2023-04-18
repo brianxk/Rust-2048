@@ -56,7 +56,7 @@ impl Game {
     pub fn new() -> Game {
         const EMPTY_TILE: Option<Tile> = None;
         const EMPTY_ROW: [Option<Tile>; BOARD_DIMENSION] = [EMPTY_TILE; BOARD_DIMENSION];
-        let tile_ids: [u8; NUM_TILES] = std::array::from_fn(|_| (0..NUM_TILES as u8).next().expect("Error generating array of u8 from 0..16"));
+        let tile_ids: [u8; NUM_TILES] = std::array::from_fn(|i| i as u8);
 
         let mut game = Game {
             board: [EMPTY_ROW; BOARD_DIMENSION],
@@ -65,11 +65,6 @@ impl Game {
             score: 0,
             tile_ids: LinkedList::from(tile_ids),
         };
-
-        // TO-DO: Remove this once you are done tseting 
-        for i in &game.tile_ids {
-            println!("ID: {i}");
-        }
 
         // If first tile is 4, second tile must be 2.
         // If first tile is 2, second tile may either be 2 or 4.
