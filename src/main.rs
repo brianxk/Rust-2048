@@ -38,13 +38,13 @@ fn app() -> Html {
             </div>
 
             <div class="body">
-                <div class="body-top">
-                    <New_Game_Button/>
-                </div>
-                <div class="body-mid">
-                    <Game_Board/>
-                </div>
-                <div class="body-bot">
+                <div class="body-central">
+                    <div class="metadata">
+                        <New_Game_Button/>
+                    </div>
+                    <div class="board-container">
+                        <Game_Board/>
+                    </div>
                 </div>
             </div>
 

@@ -697,7 +697,7 @@ function initSync(module) {
 
 async function init(input) {
     if (typeof input === 'undefined') {
-        input = new URL('rust-2048-f11dd98e7fa9240e_bg.wasm', import.meta.url);
+        input = new URL('rust-2048-5dfcd55cee84f331_bg.wasm', import.meta.url);
     }
     const imports = getImports();
 
