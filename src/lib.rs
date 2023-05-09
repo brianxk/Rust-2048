@@ -1,16 +1,17 @@
 use rand::{distributions::WeightedIndex, prelude::Distribution, seq::SliceRandom};
 use std::collections::LinkedList;
 
-const BOARD_DIMENSION: usize = 4;
+pub const BOARD_DIMENSION: usize = 4;
 const NUM_TILES: usize = BOARD_DIMENSION * BOARD_DIMENSION;
 
-struct Tile {
+#[derive(PartialEq)]
+pub struct Tile {
     value: u32,
     id: u8,
 }
 
 pub struct Game {
-    board: [[Option<Tile>; BOARD_DIMENSION]; BOARD_DIMENSION],
+    pub board: [[Option<Tile>; BOARD_DIMENSION]; BOARD_DIMENSION],
     new_tile_params: NewTileParams,
     free_slots: Vec<(usize, usize)>,
     pub score: u64,

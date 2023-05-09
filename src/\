@@ -1,13 +1,13 @@
 use yew::prelude::*;
+// use rust_2048::{ Game, BOARD_DIMENSION };
 use rust_2048::*;
 
-#[derive(Properties, PartialEq)]
-struct Props {
+#[derive(Clone, Properties)]
+pub struct Props {
     pub board: [[Option<Tile>; 4]; 4],
 }
 
-#[function_component(Game_Board)]
-fn game_board() -> Html {
+fn game_board(props: &Props) -> Html {
     html! {
         <table class="board">
             { for (0..BOARD_DIMENSION).map(|i| {
@@ -28,24 +28,13 @@ fn game_board() -> Html {
 
 #[function_component(App)]
 fn app() -> Html {
-    let game_state = Game::new();
-    let board = game_state.board;
-
     html! {
         <>
             <div class="header">
-                <h1>{ "Welcome to 2048!!" }</h1>
+                <h1>{ "Welcome to 2048!" }</h1>
             </div>
 
             <div class="body">
-                <div class="body-top">
-                    <New_Game_Button/>
-                </div>
-                <div class="body-mid">
-                    <Game_Board/>
-                </div>
-                <div class="body-bot">
-                </div>
             </div>
 
             <div class="footer">
@@ -58,15 +47,6 @@ fn app() -> Html {
                 </h1>
             </div>
         </>
-    }
-}
-
-#[function_component(New_Game_Button)]
-fn new_game_button() -> Html {
-    // let handle_new_game = props.on_new_game.clone();
-
-    html! {
-        <button class="new-game" onclick={Callback::from(|_| ())}>{ "New Game" }</button>
     }
 }
 
