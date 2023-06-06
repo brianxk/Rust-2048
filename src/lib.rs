@@ -1,4 +1,5 @@
 use rand::{distributions::WeightedIndex, prelude::Distribution, seq::SliceRandom};
+use yew::html::ImplicitClone;
 use std::collections::LinkedList;
 
 pub const BOARD_DIMENSION: usize = 4;
@@ -10,6 +11,13 @@ pub struct Tile {
     id: u8,
 }
 
+impl std::fmt::Display for Tile {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.value)
+    }
+}
+
+#[derive(PartialEq)]
 pub struct Game {
     pub board: [[Option<Tile>; BOARD_DIMENSION]; BOARD_DIMENSION],
     new_tile_params: NewTileParams,
@@ -19,6 +27,7 @@ pub struct Game {
 }
 
 /// Struct that holds the choices for new tiles and the probability with which they will appear.
+#[derive(PartialEq)]
 struct NewTileParams {
     tile_choices: [u32; 2],
     tile_weights: [u8; 2],
