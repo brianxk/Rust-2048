@@ -1,6 +1,6 @@
 use rand::{distributions::WeightedIndex, prelude::Distribution, seq::SliceRandom};
-use yew::html::ImplicitClone;
 use std::collections::LinkedList;
+use gloo_console::log;
 
 pub const BOARD_DIMENSION: usize = 4;
 const NUM_TILES: usize = BOARD_DIMENSION * BOARD_DIMENSION;
@@ -159,22 +159,22 @@ impl Game {
     /// Result will either return the updated score or an error.
     /// Error can occur when the user's input is not a valid direction, or when movement is not
     /// possible.
-    pub fn receive_input(&self, input: &String) -> Result<u64, InputError> {
-        match input.to_lowercase().trim() {
-            "k" => {
-                println!("Up");
+    pub fn receive_input(&self, input: &str) -> Result<u64, InputError> {
+        match input {
+            "ArrowUp" | "KeyK" | "KeyW" => {
+                log!("Up");
                 Ok( 0 )
             }
-            "j" => {
-                println!("Down");
+            "ArrowDown" | "KeyJ" | "KeyS" => {
+                log!("Down");
                 Ok( 1 )
             }
-            "h" => {
-                println!("Left");
+            "ArrowLeft" | "KeyH" | "KeyA" => {
+                log!("Left");
                 Ok( 2 )
             }
-            "l" => {
-                println!("Right");
+            "ArrowRight" | "KeyL" | "KeyD" => {
+                log!("Right");
                 Ok( 3 )
             }
             _ => Err(InputError::InvalidDirectionError),
@@ -183,18 +183,16 @@ impl Game {
     }
 
     fn shift_tiles(&self) {
-
+        
     }
     // Player makes a move: L, R, U, D
     // Game updates the board according to rules
     // 1) Start from the direction of movement
     // 2) Combine first, then move next tiles
-    // 3) Update score and display board (should main call print or should updated board be
-    //    returned?)
     //
     // Potential solutions:
     // 1) Create a method which takes a direction and axis ( row vs. col ) and shifts/merges the 4
-    //    rows/columns in the prescribed direction
+    //    rows/columns in the specified direction
 
 }
 

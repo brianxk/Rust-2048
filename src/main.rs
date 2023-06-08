@@ -1,17 +1,28 @@
-use yew::prelude::*;
+use yew::{prelude::*};
 use rust_2048::*;
+// use gloo_console::log;
+use gloo::events::EventListener;
+use wasm_bindgen::{JsCast, UnwrapThrowExt};
+use std::rc::Rc;
 
 #[derive(Properties, PartialEq)]
 struct GameBoardProps {
-    game_state: Game,
+    game_state: Rc<Game>,
+}
+
+#[derive(Properties, PartialEq)]
+struct ScoreProps {
+    score: u64,
 }
 
 #[function_component(GameBoard)]
 fn game_board(props: &GameBoardProps) -> Html {
+// fn game_board() -> Html {
     html! {
         <table>
             { for (0..BOARD_DIMENSION).map(|i| {
                  let row = &props.game_state.board[i];
+                 // let row = &GAME_STATE.board[i];
                  html! {
                      <tr class="row">
                          { for (0..BOARD_DIMENSION).map(|j| {
@@ -57,12 +68,33 @@ fn footer() -> Html {
     }
 }
 
+#[function_component(Score)]
+fn score(props: &ScoreProps) -> Html {
+    html! {
+        <div class="score">{props.score}</div>
+    }
+}
+
 #[function_component(Content)]
 fn content() -> Html {
-    let game_state = Game::new();
-    
+    let game_state = Rc::new(Game::new());
+    let game_state_for_listener = game_state.clone();
+
+    use_effect(move || {
+        // Attach a keydown event listener to the document.
+        let document = gloo::utils::document();
+        let listener = EventListener::new(&document, "keydown", move |event| {
+            let event = event.dyn_ref::<web_sys::KeyboardEvent>().unwrap_throw();
+            game_state_for_listener.receive_input(&event.code());
+        });
+
+        // Called when the component is unmounted.  The closure has to hold on to `listener`, because if it gets
+        // dropped, `gloo` detaches it from the DOM. So it's important to do _something_, even if it's just dropping it.
+        || drop(listener)
+    });
+
     // Not actually keeping track of the state of any variable.
-    // use_state is being used to trigger a re-render whenever the button is clicked.
+    // use_state is being used to trigger a re-render whenever the 'New Game' button is clicked.
     // `true` is merely a placeholder value.
     let new_game = use_state(|| true);
     let onclick = {
@@ -72,10 +104,12 @@ fn content() -> Html {
     html! {
         <div class="content">
             <div class="metadata">
+                <Score score={game_state.score}/>
                 <button class="new-game" onclick={onclick}>{ "New Game" }</button>
             </div>
             <div class="board-container">
                 <GameBoard game_state={game_state}/>
+                // <GameBoard/>
             </div>
         </div>
     }
@@ -83,7 +117,6 @@ fn content() -> Html {
 
 #[function_component(App)]
 fn app() -> Html {
-    
     html! {
         <>
             <Header/>
@@ -97,3 +130,7 @@ fn main() {
     yew::Renderer::<App>::new().render();
 }
 
+// ArrowUp: 0xE048
+// ArrowLeft: 0xE04B
+// ArrowRight: 0xE04D
+// ArrowDown: 0xE050

@@ -9,4 +9,8 @@ edition = "2021"
 rand = "0.8.5"
 yew = { version = "0.20", features = ["csr"] }
 getrandom = { version = "0.2.9", features = ["js"] }
+gloo-console = "0.2.3"
+wasm-bindgen = "0.2.86"
+gloo = "0.8.0"
+web-sys = "0.3.63"
 
