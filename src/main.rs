@@ -1,13 +1,14 @@
 use yew::{prelude::*};
 use rust_2048::*;
-// use gloo_console::log;
+use gloo_console::log;
 use gloo::events::EventListener;
 use wasm_bindgen::{JsCast, UnwrapThrowExt};
 use std::rc::Rc;
+use std::cell::RefCell;
 
 #[derive(Properties, PartialEq)]
 struct GameBoardProps {
-    game_state: Rc<Game>,
+    game_state: Rc<RefCell<Game>>,
 }
 
 #[derive(Properties, PartialEq)]
@@ -21,7 +22,7 @@ fn game_board(props: &GameBoardProps) -> Html {
     html! {
         <table>
             { for (0..BOARD_DIMENSION).map(|i| {
-                 let row = &props.game_state.board[i];
+                 let row = &props.game_state.borrow().board[i];
                  // let row = &GAME_STATE.board[i];
                  html! {
                      <tr class="row">
@@ -77,15 +78,18 @@ fn score(props: &ScoreProps) -> Html {
 
 #[function_component(Content)]
 fn content() -> Html {
-    let game_state = Rc::new(Game::new());
-    let game_state_for_listener = game_state.clone();
+    let game_state = Rc::new(RefCell::new(Game::new()));
+    let game_state_for_listener = Rc::clone(&game_state);
 
     use_effect(move || {
         // Attach a keydown event listener to the document.
         let document = gloo::utils::document();
         let listener = EventListener::new(&document, "keydown", move |event| {
             let event = event.dyn_ref::<web_sys::KeyboardEvent>().unwrap_throw();
-            game_state_for_listener.receive_input(&event.code());
+            match game_state_for_listener.borrow_mut().receive_input(&event.code()) {
+                InputResult::Ok(()) => log!("Move successful!"),
+                InputResult::Err(()) => log!("Move failed..."),
+            }
         });
 
         // Called when the component is unmounted.  The closure has to hold on to `listener`, because if it gets
@@ -104,7 +108,7 @@ fn content() -> Html {
     html! {
         <div class="content">
             <div class="metadata">
-                <Score score={game_state.score}/>
+                <Score score={game_state.borrow().score}/>
                 <button class="new-game" onclick={onclick}>{ "New Game" }</button>
             </div>
             <div class="board-container">

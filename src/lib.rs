@@ -5,6 +5,13 @@ use gloo_console::log;
 pub const BOARD_DIMENSION: usize = 4;
 const NUM_TILES: usize = BOARD_DIMENSION * BOARD_DIMENSION;
 
+enum Direction {
+    Up,
+    Down,
+    Left,
+    Right,
+}
+
 #[derive(PartialEq)]
 pub struct Tile {
     value: u32,
@@ -52,9 +59,9 @@ impl NewTileParams {
     }
 }
 
-pub enum InputError {
-    InvalidDirectionError,
-    MovementNotPossibleError,
+pub enum InputResult {
+    Ok(()),
+    Err(()),
 }
 
 impl Game {
@@ -155,36 +162,61 @@ impl Game {
         }
     }
 
-    /// Receives the user's input.
-    /// Result will either return the updated score or an error.
-    /// Error can occur when the user's input is not a valid direction, or when movement is not
-    /// possible.
-    pub fn receive_input(&self, input: &str) -> Result<u64, InputError> {
+    /// Receives the user's input and slides tiles in the specified direction.
+    pub fn receive_input(&mut self, input: &str) -> InputResult {
+        let mut move_occurred = InputResult::Err(());
+
+        // i in the loops below represents the index difference between the Tile's starting slot
+        // and its destination slot.
+        // i will be incremented each time the Tile is shifted by one slot and until it can 
+        // no longer be shifted.
         match input {
             "ArrowUp" | "KeyK" | "KeyW" => {
-                log!("Up");
-                Ok( 0 )
-            }
-            "ArrowDown" | "KeyJ" | "KeyS" => {
-                log!("Down");
-                Ok( 1 )
-            }
-            "ArrowLeft" | "KeyH" | "KeyA" => {
-                log!("Left");
-                Ok( 2 )
-            }
-            "ArrowRight" | "KeyL" | "KeyD" => {
-                log!("Right");
-                Ok( 3 )
-            }
-            _ => Err(InputError::InvalidDirectionError),
+                for col in 0..BOARD_DIMENSION {
+                    for row in 1..BOARD_DIMENSION {
+                        let mut i = 1;
+                        if let Some(tile) = self.board[row][col].take() {
+                            // Loop until an occupied cell is found.
+                            while row.checked_sub(i).is_some_and(|row| self.board[row][col].is_none()) {
+                                i += 1;
+                                move_occurred = InputResult::Ok(());
+                                log!("i: ", i);
+                            }
+
+                            self.board[row - (i - 1)][col] = Some(tile);
+                        }
+                    }
+                }
+            },
+            "ArrowDown" | "KeyJ" | "KeyS" => (),
+            "ArrowLeft" | "KeyH" | "KeyA" => (),
+            "ArrowRight" | "KeyL" | "KeyD" => (),
+            _ => (),
         }
 
+        // self.shift_tiles(direction);
+
+        move_occurred
     }
 
-    fn shift_tiles(&self) {
-        
-    }
+    // fn shift_tiles(&mut self, direction: Direction) {
+    //     match direction {
+    //         Direction::Up => {
+    //             for col in 0..board_dimension {
+    //                 for row in 1..board_dimension {
+    //                     match &self.board[row - 1][col] {
+    //                         some(_) => (),
+    //                         none => self.board[row - 1][col] = self.board[row][col].take(),
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //         Direction::Down => (),
+    //         Direction::Left => (),
+    //         Direction::Right => (),
+    //     }
+    // }
+
     // Player makes a move: L, R, U, D
     // Game updates the board according to rules
     // 1) Start from the direction of movement
