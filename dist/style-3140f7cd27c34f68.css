@@ -52,13 +52,25 @@ div.metadata > * {
     line-height: 35px;
 }
 
-.new-game {
+div.metadata > .new-game {
     right: 0px;
     width: 125px;
     border: outset 1px #003862;
 }
 
+.move-tile {
+    right: 0px;
+    top: 0px;
+    width: 125px;
+    border: outset 1px #003862;
+}
+
+.new-game:hover {
+    background-color: #84bbd7;
+}
+
 div.board-container {
+    position: relative;
     height: 560px;
 }
 
@@ -67,24 +79,32 @@ div.footer {
 }
 
 table {
-    border-spacing: 5px;
+    border-spacing: 4px;
     border-radius: 10px;
-    border: 1px solid #dac15b;
     background-color: #dac15b;
     margin: auto;
 }
 
-td {
-    font-family: Verdana, Geneva, sans-serif;
+.cell {
     border-radius: 5px;
     width: 120px;
     height: 120px;
-    text-align: center;
-    font-size: 3.5rem;
     background-color: #c6aa56;
-    /* transition: all 0.2s ease-in-out; */
 }
 
+.tile {
+    font-family: Verdana, Geneva, sans-serif;
+    text-align: center;
+    line-height: 120px;
+    font-size: 3.5rem;
+    position: absolute;
+    left: var(--left);
+    top: var(--top);
+    background-color: orange;
+    transition: transform 0.10s linear;
+}
+
+    /* transform: translate(-100px, 0px); */
 .typed {
     overflow: hidden;
     white-space: nowrap;
@@ -101,7 +121,5 @@ td {
 
 @keyframes blinking {
   0% {border-right-color: transparent}
-  /* 50% {border-right-color: #003862} */
-  /* 100% {border-right-color: transparent} */
 }
 

@@ -14,8 +14,11 @@ enum Direction {
 
 #[derive(PartialEq)]
 pub struct Tile {
-    value: u32,
-    id: u8,
+    pub value: u32,
+    pub id: u8,
+    pub background_color: String,
+    pub row: usize,
+    pub col: usize,
 }
 
 impl std::fmt::Display for Tile {
@@ -94,22 +97,32 @@ impl Game {
             second_tile = game.generate_tile();
         }
 
-        // Construct `Tile` structs from the randomly generated numbers
+        let first_tile_pos = game.get_random_free_slot().expect("New game board, should not panic.");
+
         let first_tile = Tile {
             value: first_tile,
-            id: *game.tile_ids.iter().next().expect("Error retrieving next tile ID."),
+            // id: *game.tile_ids.iter().next().expect("Error retrieving next tile ID."),
+            id: 0,
+            background_color: "orange".to_string(),
+            row: first_tile_pos.0,
+            col: first_tile_pos.1,
         };
+
+        let second_tile_pos = game.get_random_free_slot().expect("New game board, should not panic.");
 
         let second_tile = Tile {
             value: second_tile,
-            id: *game.tile_ids.iter().next().expect("Error retrieving next tile ID."),
+            // id: *game.tile_ids.iter().next().expect("Error retrieving next tile ID."),
+            id: 1,
+            background_color: "orange".to_string(),
+            row: second_tile_pos.0,
+            col: second_tile_pos.1,
         };
 
-        let first_tile_pos = game.get_random_free_slot().expect("New game board, should not panic.");
+        // log!("ID: ", first_tile.id, "\nValue: ", first_tile.value);
+        // log!("ID: ", second_tile.id, "\nValue: ", second_tile.value);
 
         game.board[first_tile_pos.0][first_tile_pos.1] = Some(first_tile);
-
-        let second_tile_pos = game.get_random_free_slot().expect("New game board, should not panic.");
         game.board[second_tile_pos.0][second_tile_pos.1] = Some(second_tile);
 
         game
@@ -137,6 +150,20 @@ impl Game {
                 }
             }
         }
+    }
+
+    pub fn get_tiles(&self) -> Vec<&Tile> {
+        let mut tiles = Vec::new();
+
+        for row in 0..BOARD_DIMENSION {
+            for col in 0..BOARD_DIMENSION {
+                if let Some(tile) = &self.board[row][col] {
+                    tiles.push(tile);
+                }
+            }
+        }
+
+        tiles
     }
 
     /// Returns the coordinates of a free board slot at random. 
@@ -180,7 +207,7 @@ impl Game {
                             while row.checked_sub(i).is_some_and(|row| self.board[row][col].is_none()) {
                                 i += 1;
                                 move_occurred = InputResult::Ok(());
-                                log!("i: ", i);
+                                // log!("i: ", i);
                             }
 
                             self.board[row - (i - 1)][col] = Some(tile);
@@ -289,7 +316,8 @@ mod tests {
             let coord = game.get_random_free_slot();
 
             match coord {
-                Some((row, col)) => game.board[row][col] = Some(Tile { value: 0, id: 0 }),
+                Some((row, col)) => game.board[row][col] = 
+                    Some(Tile { value: 0, id: 0, background_color: "orange".to_string(), row, col }),
                 None => panic!("Game board filled up unexpectedly."),
             }
         }
