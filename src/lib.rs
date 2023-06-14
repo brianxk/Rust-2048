@@ -108,6 +108,8 @@ impl Game {
             col: first_tile_pos.1,
         };
 
+        game.board[first_tile_pos.0][first_tile_pos.1] = Some(first_tile);
+        
         let second_tile_pos = game.get_random_free_slot().expect("New game board, should not panic.");
 
         let second_tile = Tile {
@@ -119,10 +121,6 @@ impl Game {
             col: second_tile_pos.1,
         };
 
-        // log!("ID: ", first_tile.id, "\nValue: ", first_tile.value);
-        // log!("ID: ", second_tile.id, "\nValue: ", second_tile.value);
-
-        game.board[first_tile_pos.0][first_tile_pos.1] = Some(first_tile);
         game.board[second_tile_pos.0][second_tile_pos.1] = Some(second_tile);
 
         game

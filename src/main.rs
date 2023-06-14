@@ -8,6 +8,7 @@ use wasm_bindgen::{JsCast, UnwrapThrowExt};
 use web_sys::{Element, window};
 use std::rc::Rc;
 use std::cell::RefCell;
+use substring::Substring;
 
 const BORDER_SPACING: u16 = 4;
 const TILE_DIMENSION: u16 = 120;
@@ -102,7 +103,8 @@ fn content() -> Html {
                                         let left = computed_style.get_property_value("left").unwrap();
                                         let top = computed_style.get_property_value("top").unwrap();
 
-                                        let (i, j) = convert_to_indexes(top, left);
+
+                                        let (i, j) = convert_to_indexes(&top, &left);
 
                                         log!("Left offset:", left);
                                         log!("Top offset:", top);
@@ -262,7 +264,11 @@ fn convert_to_pixels(i: usize, j: usize) -> (u16, u16) {
 }
 
 /// Accepts a top, left pair of pixel offsets and returns the grid coordinate equivalents for array indexing
-fn convert_to_indexes(top: u16, left: u16) -> (usize, usize) {
+/// This function will handle the String parsing, as such the offset values should be given "as is" e.g. "252px".
+fn convert_to_indexes(top: &String, left: &String) -> (usize, usize) {
+    let left = left.substring(0, left.chars().count() - 2).parse::<u16>().unwrap();
+    let top = top.substring(0, top.chars().count() - 2).parse::<u16>().unwrap();
+    
     (pixel_to_index(top), pixel_to_index(left))
 }
 
