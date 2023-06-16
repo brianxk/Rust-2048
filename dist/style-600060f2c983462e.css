@@ -98,13 +98,27 @@ table {
     line-height: 120px;
     font-size: 3.5rem;
     position: absolute;
-    left: var(--left);
     top: var(--top);
+    left: var(--left);
     background-color: orange;
     transition: transform 0.10s linear;
+    animation: expand 0.25s ease-in-out;
 }
 
-    /* transform: translate(-100px, 0px); */
+
+    /* transform: translate(var(--top), var(--left)); */
+
+@keyframes expand {
+  0% {
+    transform: scale(0);
+    transform-origin: center;
+  }
+  100% {
+    transform: scale(1);
+    transform-origin: center;
+  }
+}
+
 .typed {
     overflow: hidden;
     white-space: nowrap;

@@ -5,13 +5,6 @@ use gloo_console::log;
 pub const BOARD_DIMENSION: usize = 4;
 const NUM_TILES: usize = BOARD_DIMENSION * BOARD_DIMENSION;
 
-enum Direction {
-    Up,
-    Down,
-    Left,
-    Right,
-}
-
 #[derive(PartialEq)]
 pub struct Tile {
     pub value: u32,
@@ -23,7 +16,11 @@ pub struct Tile {
 
 impl std::fmt::Display for Tile {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", self.value)
+        write!(f, "value: {}\nid: {}\nrow: {}\n col:{}",
+               self.value,
+               self.id,
+               self.row,
+               self.col)
     }
 }
 
@@ -62,9 +59,11 @@ impl NewTileParams {
     }
 }
 
-pub enum InputResult {
-    Ok(()),
-    Err(()),
+pub struct InvalidMove;
+
+pub enum InputResult<'a> {
+    Ok(Vec<&'a Tile>),
+    Err(InvalidMove),
 }
 
 impl Game {
@@ -150,6 +149,7 @@ impl Game {
         }
     }
 
+    /// Returns a vec of all current tiles.
     pub fn get_tiles(&self) -> Vec<&Tile> {
         let mut tiles = Vec::new();
 
@@ -189,7 +189,7 @@ impl Game {
 
     /// Receives the user's input and slides tiles in the specified direction.
     pub fn receive_input(&mut self, input: &str) -> InputResult {
-        let mut move_occurred = InputResult::Err(());
+        let mut move_occurred = false;
 
         // i in the loops below represents the index difference between the Tile's starting slot
         // and its destination slot.
@@ -200,15 +200,22 @@ impl Game {
                 for col in 0..BOARD_DIMENSION {
                     for row in 1..BOARD_DIMENSION {
                         let mut i = 1;
-                        if let Some(tile) = self.board[row][col].take() {
+                        if let Some(mut tile) = self.board[row][col].take() {
+                            log!("1st log: ", tile.to_string());
                             // Loop until an occupied cell is found.
-                            while row.checked_sub(i).is_some_and(|row| self.board[row][col].is_none()) {
+                            while row.checked_sub(i).is_some_and(|diff| self.board[diff][col].is_none()) {
                                 i += 1;
-                                move_occurred = InputResult::Ok(());
-                                // log!("i: ", i);
+                                move_occurred = true;
                             }
 
-                            self.board[row - (i - 1)][col] = Some(tile);
+                            let new_row = row - ( i - 1 );
+                            let new_col = col;
+
+                            tile.row = new_row;
+                            tile.col = new_col;
+
+                            log!("2nd log:", tile.to_string());
+                            self.board[new_row][new_col] = Some(tile);
                         }
                     }
                 }
@@ -219,38 +226,11 @@ impl Game {
             _ => (),
         }
 
-        // self.shift_tiles(direction);
-
-        move_occurred
+        match move_occurred {
+            true => InputResult::Ok(self.get_tiles()),
+            false => InputResult::Err(InvalidMove),
+        }
     }
-
-    // fn shift_tiles(&mut self, direction: Direction) {
-    //     match direction {
-    //         Direction::Up => {
-    //             for col in 0..board_dimension {
-    //                 for row in 1..board_dimension {
-    //                     match &self.board[row - 1][col] {
-    //                         some(_) => (),
-    //                         none => self.board[row - 1][col] = self.board[row][col].take(),
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //         Direction::Down => (),
-    //         Direction::Left => (),
-    //         Direction::Right => (),
-    //     }
-    // }
-
-    // Player makes a move: L, R, U, D
-    // Game updates the board according to rules
-    // 1) Start from the direction of movement
-    // 2) Combine first, then move next tiles
-    //
-    // Potential solutions:
-    // 1) Create a method which takes a direction and axis ( row vs. col ) and shifts/merges the 4
-    //    rows/columns in the specified direction
-
 }
 
 #[cfg(test)]
