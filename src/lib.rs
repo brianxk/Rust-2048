@@ -1,6 +1,7 @@
 use rand::{distributions::WeightedIndex, prelude::Distribution, seq::SliceRandom};
 use std::collections::LinkedList;
 use gloo_console::log;
+use num::Unsigned;
 
 pub const BOARD_DIMENSION: usize = 4;
 const NUM_TILES: usize = BOARD_DIMENSION * BOARD_DIMENSION;
@@ -200,27 +201,39 @@ impl Game {
                 for col in 0..BOARD_DIMENSION {
                     for row in 1..BOARD_DIMENSION {
                         let mut i = 1;
-                        if let Some(mut tile) = self.board[row][col].take() {
-                            log!("1st log: ", tile.to_string());
+                        if let Some(tile) = self.board[row][col].take() {
                             // Loop until an occupied cell is found.
                             while row.checked_sub(i).is_some_and(|diff| self.board[diff][col].is_none()) {
                                 i += 1;
+                            }
+
+                            if i > 1 {
                                 move_occurred = true;
                             }
 
-                            let new_row = row - ( i - 1 );
-                            let new_col = col;
-
-                            tile.row = new_row;
-                            tile.col = new_col;
-
-                            log!("2nd log:", tile.to_string());
-                            self.board[new_row][new_col] = Some(tile);
+                            self.update_tile_and_board(tile, row - (i - 1), col);
                         }
                     }
                 }
             },
-            "ArrowDown" | "KeyJ" | "KeyS" => (),
+            "ArrowDown" | "KeyJ" | "KeyS" => {
+                for col in 0..BOARD_DIMENSION {
+                    for row in (0..BOARD_DIMENSION - 1).rev() {
+                        let mut i = 1;
+                        if let Some(mut tile) = self.board[row][col].take() {
+                            while row.checked_add_max(i, BOARD_DIMENSION).is_some_and(|sum| self.board[sum][col].is_none()) {
+                                i += 1;
+                            }
+
+                            if i > 1 {
+                                move_occurred = true;
+                            }
+
+                            self.update_tile_and_board(tile, row + (i - 1), col);
+                        }
+                    }
+                }
+            }
             "ArrowLeft" | "KeyH" | "KeyA" => (),
             "ArrowRight" | "KeyL" | "KeyD" => (),
             _ => (),
@@ -229,6 +242,34 @@ impl Game {
         match move_occurred {
             true => InputResult::Ok(self.get_tiles()),
             false => InputResult::Err(InvalidMove),
+        }
+    }
+
+    /// Receives a tile, the new row and col indexes, and updates both the tile's internal row and
+    /// col fields and places the tile in self.board's new location.
+    fn update_tile_and_board(&mut self, mut tile: Tile, new_row: usize, new_col: usize) {
+        tile.row = new_row;
+        tile.col = new_col;
+
+        self.board[new_row][new_col] = Some(tile);
+    }
+}
+
+// Helper functions
+
+trait CheckedAdd {
+    fn checked_add_max(self, rhs: usize, max: usize) -> Option<usize>;
+}
+
+/// Similar to the builtin `checked_add()` method but allows for defining a custom max
+impl CheckedAdd for usize {
+    fn checked_add_max(self, rhs: Self, max: Self) -> Option<Self> {
+        let sum = self + rhs;
+
+        if sum < max {
+            Some(sum)
+        } else {
+            None
         }
     }
 }
