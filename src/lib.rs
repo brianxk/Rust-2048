@@ -201,6 +201,7 @@ impl Game {
                 for col in 0..BOARD_DIMENSION {
                     for row in 1..BOARD_DIMENSION {
                         let mut i = 1;
+
                         if let Some(tile) = self.board[row][col].take() {
                             // Loop until an occupied cell is found.
                             while row.checked_sub(i).is_some_and(|diff| self.board[diff][col].is_none()) {
@@ -220,7 +221,8 @@ impl Game {
                 for col in 0..BOARD_DIMENSION {
                     for row in (0..BOARD_DIMENSION - 1).rev() {
                         let mut i = 1;
-                        if let Some(mut tile) = self.board[row][col].take() {
+
+                        if let Some(tile) = self.board[row][col].take() {
                             while row.checked_add_max(i, BOARD_DIMENSION).is_some_and(|sum| self.board[sum][col].is_none()) {
                                 i += 1;
                             }
@@ -234,8 +236,44 @@ impl Game {
                     }
                 }
             }
-            "ArrowLeft" | "KeyH" | "KeyA" => (),
-            "ArrowRight" | "KeyL" | "KeyD" => (),
+            "ArrowLeft" | "KeyH" | "KeyA" => {
+                for row in 0..BOARD_DIMENSION {
+                    for col in 1..BOARD_DIMENSION {
+                        let mut i = 1;
+
+                        if let Some(tile) = self.board[row][col].take() {
+                            while col.checked_sub(i).is_some_and(|diff| self.board[row][diff].is_none()) {
+                                i += 1
+                            }
+
+                            if i > 1 {
+                                move_occurred = true;
+                            }
+
+                            self.update_tile_and_board(tile, row, col - (i - 1));
+                        }
+                    }
+                }
+            },
+            "ArrowRight" | "KeyL" | "KeyD" => {
+                for row in 0..BOARD_DIMENSION {
+                    for col in (0..BOARD_DIMENSION - 1).rev() {
+                        if let Some(tile) = self.board[row][col].take() {
+                            let mut i = 1;
+
+                            while col.checked_add_max(i, BOARD_DIMENSION).is_some_and(|sum| self.board[row][sum].is_none()) {
+                                i += 1;
+                            }
+
+                            if i > 1 {
+                                move_occurred = true;
+                            }
+
+                            self.update_tile_and_board(tile, row, col + (i - 1));
+                        }
+                    }
+                }
+            }
             _ => (),
         }
 
