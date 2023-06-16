@@ -1,17 +1,22 @@
 use web_sys::HtmlElement;
 use yew::prelude::*;
-use yew::NodeRef;
 use rust_2048::*;
 use gloo_console::log;
 use gloo::events::EventListener;
 use wasm_bindgen::{JsCast, UnwrapThrowExt};
-use web_sys::{Element, window};
+use web_sys::window;
 use std::rc::Rc;
 use std::cell::RefCell;
 use substring::Substring;
+use wasm_bindgen::prelude::wasm_bindgen;
 
 const BORDER_SPACING: u16 = 4;
 const TILE_DIMENSION: u16 = 120;
+
+#[wasm_bindgen(module = "/prevent_arrow_scrolling.js")]
+extern "C" {
+    fn preventDefaultScrolling();
+}
 
 #[derive(Properties, PartialEq)]
 struct ScoreProps {
@@ -69,6 +74,10 @@ fn content() -> Html {
         let document = gloo::utils::document();
         let listener = EventListener::new(&document, "keydown", move |event| {
             let event = event.dyn_ref::<web_sys::KeyboardEvent>().unwrap_throw();
+
+            // preventArrowKeyScrolling(event.clone());
+            preventDefaultScrolling();
+
             match game_state_for_listener.borrow_mut().receive_input(&event.code()) {
                 InputResult::Ok(tiles) => {
                     log!("Move successful");
@@ -105,12 +114,8 @@ fn content() -> Html {
                                         log!("New i:", updated_tile.row);
                                         log!("New j:", updated_tile.col);
 
-                                        // log!("New top:", &new_top_offset);
-                                        // log!("New left:", &new_left_offset);
-
-
-                                        tile.style().set_property("top", &new_top_offset);
-                                        tile.style().set_property("left", &new_left_offset);
+                                        tile.style().set_property("top", &new_top_offset).unwrap();
+                                        tile.style().set_property("left", &new_left_offset).unwrap();
 
 
                                         window().unwrap().get_computed_style(&tile).unwrap();
@@ -123,7 +128,7 @@ fn content() -> Html {
                                 }
                             }
                         }
-                        Err(e) => log!("NodeList could not be found."),
+                        Err(_) => log!("NodeList could not be found."),
                     }
                 },
                 InputResult::Err(InvalidMove) => {
@@ -151,7 +156,6 @@ fn content() -> Html {
             <div class="metadata">
                 <Score score={game_state.borrow().score}/>
                 <button class="new-game" onclick={onclick}>{ "New Game" }</button>
-                <button class="move-tile">{ "Move Tile" }</button>
             </div>
             <div class="board-container">
                 <GameBoard/>

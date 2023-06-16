@@ -1,3 +1,5 @@
+import * as __wbg_star0 from './snippets/rust-2048-24d7afa6594187f0/prevent_arrow_scrolling.js';
+
 let wasm;
 
 const heap = new Array(128).fill(undefined);
@@ -740,14 +742,15 @@ function __wbg_get_imports() {
         const ret = wasm.memory;
         return addHeapObject(ret);
     };
-    imports.wbg.__wbindgen_closure_wrapper4801 = function(arg0, arg1, arg2) {
+    imports.wbg.__wbindgen_closure_wrapper4806 = function(arg0, arg1, arg2) {
         const ret = makeMutClosure(arg0, arg1, 447, __wbg_adapter_26);
         return addHeapObject(ret);
     };
-    imports.wbg.__wbindgen_closure_wrapper4921 = function(arg0, arg1, arg2) {
+    imports.wbg.__wbindgen_closure_wrapper4926 = function(arg0, arg1, arg2) {
         const ret = makeMutClosure(arg0, arg1, 453, __wbg_adapter_29);
         return addHeapObject(ret);
     };
+    imports['./snippets/rust-2048-24d7afa6594187f0/prevent_arrow_scrolling.js'] = __wbg_star0;
 
     return imports;
 }
@@ -787,7 +790,7 @@ async function __wbg_init(input) {
     if (wasm !== undefined) return wasm;
 
     if (typeof input === 'undefined') {
-        input = new URL('rust-2048-ae4565c8704e3b0c_bg.wasm', import.meta.url);
+        input = new URL('rust-2048-42c5846edaaf24ef_bg.wasm', import.meta.url);
     }
     const imports = __wbg_get_imports();
 

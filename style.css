@@ -58,13 +58,6 @@ div.metadata > .new-game {
     border: outset 1px #003862;
 }
 
-.move-tile {
-    right: 0px;
-    top: 0px;
-    width: 125px;
-    border: outset 1px #003862;
-}
-
 .new-game:hover {
     background-color: #84bbd7;
 }
