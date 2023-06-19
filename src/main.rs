@@ -1,10 +1,10 @@
-use web_sys::HtmlElement;
+use web_sys::console::time_stamp;
 use yew::prelude::*;
 use rust_2048::*;
 use gloo_console::log;
 use gloo::events::EventListener;
 use wasm_bindgen::{JsCast, UnwrapThrowExt};
-use web_sys::window;
+use web_sys::{HtmlElement, Element, window};
 use std::rc::Rc;
 use std::cell::RefCell;
 use substring::Substring;
@@ -97,28 +97,42 @@ fn content() -> Html {
                                 let computed_style = window().unwrap().get_computed_style(&tile).unwrap().unwrap();
 
                                 // How to access css properties of an element
-                                let top = computed_style.get_property_value("top").unwrap();
-                                let left = computed_style.get_property_value("left").unwrap();
+                                let current_top_offset = &computed_style.get_property_value("top").unwrap();
+                                let current_left_offset = &computed_style.get_property_value("left").unwrap();
 
                                 match get_tile_by_id(&tiles, tile_id) {
                                     Some(updated_tile) => {
                                         let (new_top_offset, new_left_offset) = convert_to_pixels(updated_tile.row, updated_tile.col);
 
+
+                                        // let top_offset_diff: i32 = new_top_offset as i32 - current_top_offset as i32;
+                                        // let left_offset_diff: i32 = new_left_offset as i32 - current_left_offset as i32;
+                                        log!("Tile ID:", tile_id, "Value:", tile.inner_text());
+                                        log!("Old i:", current_top_offset);
+                                        log!("Old j:", current_left_offset);
+
+                                        log!("New i:", new_top_offset);
+                                        log!("New j:", new_left_offset);
+
                                         let new_top_offset = format!("{}px", new_top_offset);
                                         let new_left_offset = format!("{}px", new_left_offset);
 
-                                        log!("Tile ID:", tile_id, "Value:", tile.inner_text());
-                                        log!("Old top:", top);
-                                        log!("Old left:", left);
+                                        tile.style().set_property("--current_left", &current_left_offset).unwrap();
+                                        tile.style().set_property("--current_top", &current_top_offset).unwrap();
 
-                                        log!("New i:", updated_tile.row);
-                                        log!("New j:", updated_tile.col);
+                                        tile.style().set_property("--new_left", &new_left_offset).unwrap();
+                                        tile.style().set_property("--new_top", &new_top_offset).unwrap();
 
-                                        tile.style().set_property("top", &new_top_offset).unwrap();
-                                        tile.style().set_property("left", &new_left_offset).unwrap();
+                                        let parent_node = tile.parent_node().unwrap();
+                                        parent_node.remove_child(&tile).unwrap();
+                                        parent_node.append_child(&tile).unwrap();
 
+                                        tile.style().set_property("animation", "sliding 0.05s linear forwards").unwrap();
+                                        
+                                        // tile.style().set_property("top", &new_top_offset).unwrap();
+                                        // tile.style().set_property("left", &new_left_offset).unwrap();
 
-                                        window().unwrap().get_computed_style(&tile).unwrap();
+                                        // window().unwrap().get_computed_style(&tile).unwrap();
                                     },
                                     None => {
                                         // Tile with specified id doesn't exist anymore - likely
@@ -133,6 +147,16 @@ fn content() -> Html {
                 },
                 InputResult::Err(InvalidMove) => {
                     log!("Move unsuccessful");
+
+                    let document = gloo::utils::document();
+                    let test_element = document.query_selector(".test").unwrap().unwrap();
+
+                    let parent_node = test_element.parent_node().unwrap();
+                    parent_node.remove_child(&test_element).unwrap();
+                    parent_node.append_child(&test_element).unwrap();
+                    
+                    // test_element.class_list().remove_1("slide-animation").unwrap();
+                    // test_element.class_list().add_1("slide-animation").unwrap();
                 },
             }
         });
@@ -185,29 +209,6 @@ fn content() -> Html {
     }
 }
 
-// TODO: 
-// If I know the starting and ending position of a tile after a move, I'm assuming I can program
-// the animation.
-//
-// Problem with recycling IDs is that a new tile could use the ID of a tile that was recently
-// merged. I don't remember how I implemented this - look into this next time.
-//
-// Possibly worth implementing a method that returns a vector of all current tiles. If a tile
-// doesn't exist after a move, it was merged. If a tile with the same ID but different number
-// exists, the previous tile was merged and its value/color need to be updated.
-//
-// Not all tiles will be moved, and for those the animation should not occur.
-//
-// Is it worth implementing this method, or is it better to return a list of all moved tiles from
-// the receive_input() method? In the latter approach I don't need to search through and see what
-// tiles ended up where manually. I could also include info about which tiles were removed due to a
-// merge.
-//
-// let row = &props.game_state.borrow().board[i];
-// let row = &GAME_STATE.board[i];
-// let tile = &row[j];
-// <td class="cell">{ tile.as_ref().map(|t| t.to_string()).unwrap_or_else(|| "\u{00a0}".to_string()) }</td>
-
 #[function_component(Score)]
 fn score(props: &ScoreProps) -> Html {
     html! {
@@ -256,7 +257,7 @@ fn main() {
     yew::Renderer::<App>::new().render();
 }
 
-// Utility functions
+// Helper functions
 
 /// Accepts a i, j pair of grid coordinates and returns the pixel offset equivalents for CSS positioning
 fn convert_to_pixels(i: usize, j: usize) -> (u16, u16) {
@@ -272,13 +273,18 @@ fn convert_to_pixels(i: usize, j: usize) -> (u16, u16) {
 /// Accepts a top, left pair of pixel offsets and returns the grid coordinate equivalents for array indexing
 /// This function will handle the String parsing, as such the offset values should be given "as is" e.g. "252px".
 fn convert_to_indexes(top: &str, left: &str) -> (usize, usize) {
-    let top = top.substring(0, top.chars().count() - 2).parse::<u16>().unwrap();
-    let left = left.substring(0, left.chars().count() - 2).parse::<u16>().unwrap();
+    let top = pixel_to_u16(top);
+    let left = pixel_to_u16(left);
     
     (pixel_to_index(top), pixel_to_index(left))
 }
 
-/// Helper function for `convert_to_indexes` that will match pixel offsets to indexes
+/// Accepts a String pixel value e.g. "252px" and returns it parsed as u16.
+fn pixel_to_u16(pixel_value: &str) -> u16 {
+    pixel_value.substring(0, pixel_value.chars().count() - 2).parse::<u16>().unwrap()
+}
+
+/// Accepts pixel values as u16 and returns the corresponding grid index.
 fn pixel_to_index(pixel_value: u16) -> usize {
     match pixel_value {
         4 => 0,

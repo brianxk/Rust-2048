@@ -98,9 +98,6 @@ table {
     animation: expand 0.25s ease-in-out;
 }
 
-
-    /* transform: translate(var(--top), var(--left)); */
-
 @keyframes expand {
   0% {
     transform: scale(0);
@@ -128,5 +125,26 @@ table {
 
 @keyframes blinking {
   0% {border-right-color: transparent}
+}
+
+.test {
+    position: absolute;
+    left: 50px;
+    top: 15px;
+}
+
+/* .animated { */
+/*     animation: sliding 0.5s linear forwards; */
+/* } */
+
+@keyframes sliding {
+    0% {
+        left: var(--current_left);
+        top: var(--current_top);
+    }
+    100% {
+        left: var(--new_left);
+        top: var(--new_top);
+    }
 }
 
