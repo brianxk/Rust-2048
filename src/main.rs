@@ -1,10 +1,9 @@
-use web_sys::console::time_stamp;
 use yew::prelude::*;
 use rust_2048::*;
 use gloo_console::log;
 use gloo::events::EventListener;
 use wasm_bindgen::{JsCast, UnwrapThrowExt};
-use web_sys::{HtmlElement, Element, window};
+use web_sys::{HtmlElement, window};
 use std::rc::Rc;
 use std::cell::RefCell;
 use substring::Substring;
@@ -68,14 +67,28 @@ fn tile(props: &TileProps) -> Html {
 fn content() -> Html {
     let game_state = Rc::new(RefCell::new(Game::new()));
     let game_state_for_listener = Rc::clone(&game_state);
+    let keypressed_for_keydown = Rc::new(RefCell::new(false));
+    let keypressed_for_keyup = keypressed_for_keydown.clone();
 
     use_effect(move || {
         // Attach a keydown event listener to the document.
         let document = gloo::utils::document();
+        
         let listener = EventListener::new(&document, "keydown", move |event| {
+
+            {
+                let mut key_event_fired = keypressed_for_keydown.borrow_mut();
+
+                if !*key_event_fired {
+                    *key_event_fired = true;
+                } else {
+                    return
+                }
+            }
+
             let event = event.dyn_ref::<web_sys::KeyboardEvent>().unwrap_throw();
 
-            // preventArrowKeyScrolling(event.clone());
+            // Prevents use of arrow keys for scrolling the page
             preventDefaultScrolling();
 
             match game_state_for_listener.borrow_mut().receive_input(&event.code()) {
@@ -107,12 +120,12 @@ fn content() -> Html {
 
                                         // let top_offset_diff: i32 = new_top_offset as i32 - current_top_offset as i32;
                                         // let left_offset_diff: i32 = new_left_offset as i32 - current_left_offset as i32;
-                                        log!("Tile ID:", tile_id, "Value:", tile.inner_text());
-                                        log!("Old i:", current_top_offset);
-                                        log!("Old j:", current_left_offset);
+                                        // log!("Tile ID:", tile_id, "Value:", tile.inner_text());
+                                        // log!("Old i:", current_top_offset);
+                                        // log!("Old j:", current_left_offset);
 
-                                        log!("New i:", new_top_offset);
-                                        log!("New j:", new_left_offset);
+                                        // log!("New i:", new_top_offset);
+                                        // log!("New j:", new_left_offset);
 
                                         let new_top_offset = format!("{}px", new_top_offset);
                                         let new_left_offset = format!("{}px", new_left_offset);
@@ -147,22 +160,26 @@ fn content() -> Html {
                 },
                 InputResult::Err(InvalidMove) => {
                     log!("Move unsuccessful");
-
-                    let document = gloo::utils::document();
-                    let test_element = document.query_selector(".test").unwrap().unwrap();
-
-                    let parent_node = test_element.parent_node().unwrap();
-                    parent_node.remove_child(&test_element).unwrap();
-                    parent_node.append_child(&test_element).unwrap();
-                    
-                    // test_element.class_list().remove_1("slide-animation").unwrap();
-                    // test_element.class_list().add_1("slide-animation").unwrap();
                 },
             }
         });
 
         // Called when the component is unmounted.  The closure has to hold on to `listener`, because if it gets
         // dropped, `gloo` detaches it from the DOM. So it's important to do _something_, even if it's just dropping it.
+        || drop(listener)
+    });
+
+
+    use_effect(move || {
+        // Attach a keydown event listener to the document.
+        let document = gloo::utils::document();
+        
+        let listener = EventListener::new(&document, "keyup", move |_event| {
+            let mut key_event_fired = keypressed_for_keyup.borrow_mut();
+
+            *key_event_fired = false;
+        });
+
         || drop(listener)
     });
 
