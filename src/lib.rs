@@ -12,6 +12,20 @@ pub struct Tile {
     pub background_color: String,
     pub row: usize,
     pub col: usize,
+    pub merged: bool,
+}
+
+impl Tile {
+    fn new(value: u32, id: usize, background_color: String, row: usize, col: usize) -> Tile {
+        Tile {
+            value,
+            id,
+            background_color,
+            row,
+            col,
+            merged: false,
+        }
+    }
 }
 
 impl std::fmt::Display for Tile {
@@ -30,7 +44,7 @@ pub struct Game {
     new_tile_params: NewTileParams,
     free_slots: Vec<(usize, usize)>,
     pub score: u64,
-    tile_ids: LinkedList<u8>,
+    id_list: LinkedList<usize>,
 }
 
 /// Struct that holds the choices for new tiles and the probability with which they will appear.
@@ -76,54 +90,56 @@ impl Game {
     pub fn new() -> Game {
         const EMPTY_TILE: Option<Tile> = None;
         const EMPTY_ROW: [Option<Tile>; BOARD_DIMENSION] = [EMPTY_TILE; BOARD_DIMENSION];
-        let tile_ids: [u8; NUM_TILES] = std::array::from_fn(|i| i as u8);
+        
+        // Tile IDs will be recycled, but we are making the number of available IDs 1 greater than
+        // the maximum number of tiles. This is because a new tile should not recycle an ID from a
+        // tile that was just merged on the current turn. The edge case here is the entire board is
+        // occupied with 16 tiles but a player move is still possible; in this case the new tile
+        // created after this move will need a 17th ID to use.
+        let tile_ids: [usize; NUM_TILES + 1] = std::array::from_fn(|i| i as usize);
 
         let mut game = Game {
             board: [EMPTY_ROW; BOARD_DIMENSION],
             new_tile_params: NewTileParams::new(),
             free_slots: Vec::with_capacity(BOARD_DIMENSION * BOARD_DIMENSION),
             score: 0,
-            tile_ids: LinkedList::from(tile_ids),
+            id_list: LinkedList::from(tile_ids),
         };
 
         // If first tile is 4, second tile must be 2.
         // If first tile is 2, second tile may either be 2 or 4.
-        let first_tile = game.generate_tile();
-        let second_tile;
+        let first_tile_value = game.generate_tile();
+        let second_tile_value;
         
-        if first_tile == game.new_tile_params.tile_choices[NewTileParams::FOUR] {
-            second_tile = game.new_tile_params.tile_choices[NewTileParams::TWO];
+        if first_tile_value == game.new_tile_params.tile_choices[NewTileParams::FOUR] {
+            second_tile_value = game.new_tile_params.tile_choices[NewTileParams::TWO];
         } else {
-            second_tile = game.generate_tile();
+            second_tile_value = game.generate_tile();
         }
 
         let first_tile_pos = game.get_random_free_slot().expect("New game board, should not panic.");
-
-        let first_tile = Tile {
-            value: first_tile,
-            // id: *game.tile_ids.iter().next().expect("Error retrieving next tile ID."),
-            id: 0,
-            background_color: "pink".to_string(),
-            row: first_tile_pos.0,
-            col: first_tile_pos.1,
-        };
-
+        let first_tile_id = game.get_id().unwrap();
+        let first_tile = Tile::new(first_tile_value, first_tile_id, "pink".to_string(), first_tile_pos.0, first_tile_pos.1);
         game.board[first_tile_pos.0][first_tile_pos.1] = Some(first_tile);
         
         let second_tile_pos = game.get_random_free_slot().expect("New game board, should not panic.");
-
-        let second_tile = Tile {
-            value: second_tile,
-            // id: *game.tile_ids.iter().next().expect("Error retrieving next tile ID."),
-            id: 1,
-            background_color: "pink".to_string(),
-            row: second_tile_pos.0,
-            col: second_tile_pos.1,
-        };
-
+        let second_tile_id = game.get_id().unwrap();
+        let second_tile = Tile::new(second_tile_value, second_tile_id, "pink".to_string(), second_tile_pos.0, second_tile_pos.1);
         game.board[second_tile_pos.0][second_tile_pos.1] = Some(second_tile);
 
         game
+    }
+
+    /// Returns the next available ID. Will return None if all IDs are used.
+    fn get_id(&mut self) -> Option<usize> {
+        self.id_list.pop_front()
+    }
+
+    /// Receives a vector of IDs to recycle
+    fn recycle_ids(&mut self, ids: Vec<usize>) {
+        for id in ids {
+            self.id_list.push_back(id);
+        }
     }
 
     /// Generates a new tile - either 2 or 4 according to the weights defined in
@@ -280,25 +296,13 @@ impl Game {
         match move_occurred {
             true => match self.get_random_free_slot() {
                 Some((i, j)) => {
-                    let new_id = 16;
-
-                    let new_tile = Tile {
-                        value: self.generate_tile(),
-                        id: new_id,
-                        background_color: "lightcyan".to_string(),
-                        row: i,
-                        col: j,
-                        // Need to figure out how to render the new tile.
-                        // ID system: have 17 available IDs and do not allow merged tile IDs to be
-                        // used for new tiles.
-                        // Create a systematic way to decide background color. Modulus?
-                        // Consider re-doing the colorscheme of the board in this step.
-                        // Tile merging: If the destination tile has the same value, we merge them.
-                        // Need to figure out a way to have sequential animations. 
-                    };
-
+                    let new_id = self.get_id().unwrap();
+                    let new_tile = Tile::new(self.generate_tile(), new_id, "lightcyan".to_string(), i, j);
                     self.board[i][j] = Some(new_tile);
-
+                    // Create a systematic way to decide background color. Modulus?
+                    // Consider re-doing the colorscheme of the board in this step.
+                    // Tile merging: If the destination tile has the same value, we merge them.
+                    // Need to figure out a way to have sequential animations. 
                     InputResult::Ok(new_id)
                 },
                 None => unreachable!(),
@@ -399,7 +403,7 @@ mod tests {
 
             match coord {
                 Some((row, col)) => game.board[row][col] = 
-                    Some(Tile { value: 0, id: 0, background_color: "orange".to_string(), row, col }),
+                    Some(Tile::new(0, 0, "orange".to_string(), row, col)),
                 None => panic!("Game board filled up unexpectedly."),
             }
         }
