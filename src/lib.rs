@@ -1,7 +1,6 @@
 use rand::{distributions::WeightedIndex, prelude::Distribution, seq::SliceRandom};
 use std::collections::LinkedList;
 use gloo_console::log;
-use num::Unsigned;
 
 pub const BOARD_DIMENSION: usize = 4;
 const NUM_TILES: usize = BOARD_DIMENSION * BOARD_DIMENSION;
@@ -9,7 +8,7 @@ const NUM_TILES: usize = BOARD_DIMENSION * BOARD_DIMENSION;
 #[derive(PartialEq)]
 pub struct Tile {
     pub value: u32,
-    pub id: u8,
+    pub id: usize,
     pub background_color: String,
     pub row: usize,
     pub col: usize,
@@ -62,8 +61,9 @@ impl NewTileParams {
 
 pub struct InvalidMove;
 
-pub enum InputResult<'a> {
-    Ok(Vec<&'a Tile>),
+pub enum InputResult {
+    // Ok(&'a Tile),
+    Ok(usize),
     Err(InvalidMove),
 }
 
@@ -103,7 +103,7 @@ impl Game {
             value: first_tile,
             // id: *game.tile_ids.iter().next().expect("Error retrieving next tile ID."),
             id: 0,
-            background_color: "orange".to_string(),
+            background_color: "pink".to_string(),
             row: first_tile_pos.0,
             col: first_tile_pos.1,
         };
@@ -116,7 +116,7 @@ impl Game {
             value: second_tile,
             // id: *game.tile_ids.iter().next().expect("Error retrieving next tile ID."),
             id: 1,
-            background_color: "orange".to_string(),
+            background_color: "pink".to_string(),
             row: second_tile_pos.0,
             col: second_tile_pos.1,
         };
@@ -278,7 +278,32 @@ impl Game {
         }
 
         match move_occurred {
-            true => InputResult::Ok(self.get_tiles()),
+            true => match self.get_random_free_slot() {
+                Some((i, j)) => {
+                    let new_id = 16;
+
+                    let new_tile = Tile {
+                        value: self.generate_tile(),
+                        id: new_id,
+                        background_color: "lightcyan".to_string(),
+                        row: i,
+                        col: j,
+                        // Need to figure out how to render the new tile.
+                        // ID system: have 17 available IDs and do not allow merged tile IDs to be
+                        // used for new tiles.
+                        // Create a systematic way to decide background color. Modulus?
+                        // Consider re-doing the colorscheme of the board in this step.
+                        // Tile merging: If the destination tile has the same value, we merge them.
+                        // Need to figure out a way to have sequential animations. 
+                    };
+
+                    self.board[i][j] = Some(new_tile);
+
+                    InputResult::Ok(new_id)
+                },
+                None => unreachable!(),
+            }
+                ,
             false => InputResult::Err(InvalidMove),
         }
     }

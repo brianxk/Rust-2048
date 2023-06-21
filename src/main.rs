@@ -44,7 +44,7 @@ fn game_board() -> Html {
 #[derive(Properties, PartialEq)]
 struct TileProps {
     value: u32,
-    id: u8,
+    id: usize,
     background_color: String,
     left_offset: u16,
     top_offset: u16,
@@ -52,14 +52,15 @@ struct TileProps {
 
 #[function_component(Tile)]
 fn tile(props: &TileProps) -> Html {
-    let tile_args = format!("--top: {}px; --left: {}px;", 
+    let style_args = format!("--top: {}px; --left: {}px; --background-color: {}", 
                            props.top_offset,
-                           props.left_offset);
+                           props.left_offset,
+                           props.background_color);
 
     let tile_id = props.id.to_string();
 
     html! {
-        <div id={tile_id} class="tile cell" style={tile_args}>{props.value}</div>
+        <div id={tile_id} class="tile cell" style={style_args}>{props.value}</div>
     }
 }
 
@@ -91,9 +92,12 @@ fn content() -> Html {
             // Prevents use of arrow keys for scrolling the page
             preventDefaultScrolling();
 
-            match game_state_for_listener.borrow_mut().receive_input(&event.code()) {
-                InputResult::Ok(tiles) => {
+            let mut game_state_borrow_mut = game_state_for_listener.borrow_mut();
+
+            match game_state_borrow_mut.receive_input(&event.code()) {
+                InputResult::Ok(new_tile_id) => {
                     log!("Move successful");
+                    let tiles = game_state_borrow_mut.get_tiles();
 
                     let document = gloo::utils::document();
 
@@ -106,7 +110,7 @@ fn content() -> Html {
                                 let node = node_list.get(i).unwrap();
                                 // Cast Node to Element to access html/css properties
                                 let tile = node.dyn_ref::<HtmlElement>().unwrap();
-                                let tile_id = tile.get_attribute("id").unwrap().parse::<u8>().unwrap();
+                                let tile_id = tile.get_attribute("id").unwrap().parse::<usize>().unwrap();
                                 let computed_style = window().unwrap().get_computed_style(&tile).unwrap().unwrap();
 
                                 // How to access css properties of an element
@@ -141,11 +145,6 @@ fn content() -> Html {
                                         parent_node.append_child(&tile).unwrap();
 
                                         tile.style().set_property("animation", "sliding 0.05s linear forwards").unwrap();
-                                        
-                                        // tile.style().set_property("top", &new_top_offset).unwrap();
-                                        // tile.style().set_property("left", &new_left_offset).unwrap();
-
-                                        // window().unwrap().get_computed_style(&tile).unwrap();
                                     },
                                     None => {
                                         // Tile with specified id doesn't exist anymore - likely
@@ -157,6 +156,32 @@ fn content() -> Html {
                         }
                         Err(_) => log!("NodeList could not be found."),
                     }
+
+                    // Render the new tile
+                    let new_tile = get_tile_by_id(&tiles, new_tile_id).expect("New tile ID not found.");
+                    let (top_offset, left_offset) = convert_to_pixels(new_tile.row, new_tile.col);
+                    
+                    // log!("Row:", new_tile.row);
+                    // log!("Col:", new_tile.col);
+                    // log!("Top:", top_offset);
+                    // log!("Left:", left_offset);
+
+                    let style_args = format!("--top: {}px; --left: {}px; --background-color: {}", 
+                       top_offset,
+                       left_offset,
+                       &new_tile.background_color,
+                    );
+
+                    let new_tile_node = document.create_element("div").expect("Failed to create new tile node.");
+                    new_tile_node.set_inner_html(&new_tile.value.to_string());
+                    new_tile_node.set_class_name("tile cell");
+                    new_tile_node.set_attribute("style", &style_args);
+                    new_tile_node.set_id(&new_tile_id.to_string());
+
+                    let board_container = document.query_selector(".board-container").unwrap().unwrap();
+                    board_container.append_child(&new_tile_node);
+
+
                 },
                 InputResult::Err(InvalidMove) => {
                     log!("Move unsuccessful");
@@ -188,6 +213,21 @@ fn content() -> Html {
     // `true` is merely a placeholder value.
     let new_game = use_state(|| 0);
     let onclick = {
+        // Elements added via `append_child` do not get removed when this component is re-rendered.
+        // Must remove them manually here.
+        let document = gloo::utils::document();
+        match document.query_selector_all("[class='tile cell']") {
+            Ok(node_list) => {
+                for i in 0..node_list.length() {
+                    let element = node_list.get(i).unwrap();
+                    let element = element.dyn_ref::<HtmlElement>().unwrap();
+                    element.remove();
+                }
+            }
+
+            Err(_) => log!("Tiles could not be found."),
+        }
+
         let new_game = new_game.clone();
         Callback::from(move |_| new_game.set(*new_game + 1))
     };
@@ -312,7 +352,7 @@ fn pixel_to_index(pixel_value: u16) -> usize {
     }
 }
 
-fn get_tile_by_id<'a>(tiles: &Vec<&'a rust_2048::Tile>, id: u8) -> Option<&'a rust_2048::Tile> {
+fn get_tile_by_id<'a>(tiles: &Vec<&'a rust_2048::Tile>, id: usize) -> Option<&'a rust_2048::Tile> {
     for tile in tiles {
         if tile.id == id {
             return Some(tile)

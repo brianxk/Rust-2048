@@ -74,7 +74,7 @@ div.footer {
 table {
     border-spacing: 4px;
     border-radius: 10px;
-    background-color: #dac15b;
+    background-color: #48260d;
     margin: auto;
 }
 
@@ -82,7 +82,7 @@ table {
     border-radius: 5px;
     width: 120px;
     height: 120px;
-    background-color: #c6aa56;
+    background-color: #daa265;
 }
 
 .tile {
@@ -93,7 +93,7 @@ table {
     position: absolute;
     top: var(--top);
     left: var(--left);
-    background-color: orange;
+    background-color: var(--background-color);
     transition: transform 0.10s linear;
     animation: expand 0.25s ease-in-out;
 }
