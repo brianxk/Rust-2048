@@ -237,22 +237,9 @@ fn content() -> Html {
         Callback::from(move |_| new_game.set(*new_game + 1))
     };
 
-    let metadata_style_args = format!("--button_border: {}; 
-                                      --button_background: {};
-                                      --button_hover: {};
-                                      --button_text: {};",
-                                      COLORS.text_dark,
-                                      COLORS.button,
-                                      COLORS.button_hover,
-                                      COLORS.text_dark,
-                                      );
-
     html! {
         <div class="content">
-            <div class="metadata" style={metadata_style_args}>
-                <Score score={game_state.borrow().score}/>
-                <button class="new-game" onclick={onclick}>{ "New Game" }</button>
-            </div>
+            <Metadata score={game_state.borrow().score} {onclick}/>
             <div class="board-container">
                 <GameBoard/>
                 { 
@@ -281,22 +268,33 @@ fn content() -> Html {
     }
 }
 
-// TODO: Implement Metadata as its own function component.
-// #[derive(Properties, PartialEq)]
-// struct MetadataProps {
-//     callback: yew::callback::Callback::<{unknown}>,
-//     score: u64,
-// }
+#[derive(Properties, PartialEq)]
+struct MetadataProps {
+    onclick: Callback<MouseEvent>,
+    score: u64,
+}
 
-// #[function_component(Metadata)]
-// fn metadata() -> Html {
-//     html! {
-//         <div class="metadata">
-//             <Score score={game_state.borrow().score}/>
-//             <button class="new-game" onclick={onclick}>{ "New Game" }</button>
-//         </div>
-//     }
-// }
+#[function_component(Metadata)]
+fn metadata(props: &MetadataProps) -> Html {
+    let style_args = format!("--button_border: {}; 
+                              --button_background: {};
+                              --button_hover: {};
+                              --button_text: {};",
+                              COLORS.text_dark,
+                              COLORS.button,
+                              COLORS.button_hover,
+                              COLORS.text_dark,
+                              );
+
+    let onclick = props.onclick.clone();
+
+    html! {
+        <div class="metadata" style={style_args}>
+            <Score score={props.score}/>
+            <button class="new-game" {onclick}>{ "New Game" }</button>
+        </div>
+    }
+}
 
 #[derive(Properties, PartialEq)]
 struct ScoreProps {
