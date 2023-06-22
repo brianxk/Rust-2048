@@ -1,6 +1,5 @@
 use rand::{distributions::WeightedIndex, prelude::Distribution, seq::SliceRandom};
 use std::collections::LinkedList;
-use gloo_console::log;
 
 pub const BOARD_DIMENSION: usize = 4;
 const NUM_TILES: usize = BOARD_DIMENSION * BOARD_DIMENSION;
@@ -76,7 +75,6 @@ impl NewTileParams {
 pub struct InvalidMove;
 
 pub enum InputResult {
-    // Ok(&'a Tile),
     Ok(usize),
     Err(InvalidMove),
 }
