@@ -103,33 +103,18 @@ fn content() -> Html {
 
                     match document.query_selector_all("[class='tile cell']") {
                         Ok(node_list) => {
-                            // log!("NodeList length: ", node_list.length());
-
                             for i in 0..node_list.length() {
-                                // if let Some(node) = node_list.get(i) {
                                 let node = node_list.get(i).unwrap();
-                                // Cast Node to Element to access html/css properties
                                 let tile = node.dyn_ref::<HtmlElement>().unwrap();
                                 let tile_id = tile.get_attribute("id").unwrap().parse::<usize>().unwrap();
                                 let computed_style = window().unwrap().get_computed_style(&tile).unwrap().unwrap();
 
-                                // How to access css properties of an element
                                 let current_top_offset = &computed_style.get_property_value("top").unwrap();
                                 let current_left_offset = &computed_style.get_property_value("left").unwrap();
 
                                 match get_tile_by_id(&tiles, tile_id) {
                                     Some(updated_tile) => {
                                         let (new_top_offset, new_left_offset) = convert_to_pixels(updated_tile.row, updated_tile.col);
-
-
-                                        // let top_offset_diff: i32 = new_top_offset as i32 - current_top_offset as i32;
-                                        // let left_offset_diff: i32 = new_left_offset as i32 - current_left_offset as i32;
-                                        // log!("Tile ID:", tile_id, "Value:", tile.inner_text());
-                                        // log!("Old i:", current_top_offset);
-                                        // log!("Old j:", current_left_offset);
-
-                                        // log!("New i:", new_top_offset);
-                                        // log!("New j:", new_left_offset);
 
                                         let new_top_offset = format!("{}px", new_top_offset);
                                         let new_left_offset = format!("{}px", new_left_offset);
@@ -144,12 +129,24 @@ fn content() -> Html {
                                         parent_node.remove_child(&tile).unwrap();
                                         parent_node.append_child(&tile).unwrap();
 
-                                        tile.style().set_property("animation", "sliding 0.05s linear forwards").unwrap();
+                                        tile.style().set_property("animation", "sliding 0.10s ease-in-out forwards").unwrap();
+
+                                        tile.style().set_property("top", &new_top_offset).unwrap();
+                                        tile.style().set_property("left", &new_left_offset).unwrap();
+
+                                        if updated_tile.merged {
+                                            tile.set_inner_html(&updated_tile.value.to_string());
+                                            tile.style().set_property("animation", "expand-merge 0.20s ease-in-out").unwrap();
+
+                                            let parent_node = tile.parent_node().unwrap();
+                                            parent_node.remove_child(&tile).unwrap();
+                                            parent_node.append_child(&tile).unwrap();
+                                        }
                                     },
                                     None => {
-                                        // Tile with specified id doesn't exist anymore - likely
-                                        // got merged
-                                        log!("Updated tile not found.");
+                                        // Tile with specified id was merged and should be removed.
+                                        let parent_node = tile.parent_node().unwrap();
+                                        parent_node.remove_child(&tile).unwrap();
                                     }
                                 }
                             }
@@ -157,15 +154,27 @@ fn content() -> Html {
                         Err(_) => log!("NodeList could not be found."),
                     }
 
+                    // match document.query_selector_all("[class='tile cell']") {
+                    //     Ok(node_list) => {
+                    //         for i in 0..node_list.length() {
+                    //             let node = node_list.get(i).unwrap();
+                    //             let tile = node.dyn_ref::<HtmlElement>().unwrap();
+                    //             let tile_id = tile.get_attribute("id").unwrap().parse::<usize>().unwrap();
+
+                    //             match get_tile_by_id(&tiles, tile_id) {
+                    //                 Some(updated_tile) => {
+                    //                 },
+                    //                 None => unreachable!(),
+                    //             }
+                    //         }
+                    //     },
+                    //     Err(_) => log!("NodeList could not be found."),
+                    // }
+
                     // Render the new tile
                     let new_tile = get_tile_by_id(&tiles, new_tile_id).expect("New tile ID not found.");
                     let (top_offset, left_offset) = convert_to_pixels(new_tile.row, new_tile.col);
                     
-                    // log!("Row:", new_tile.row);
-                    // log!("Col:", new_tile.col);
-                    // log!("Top:", top_offset);
-                    // log!("Left:", left_offset);
-
                     let style_args = format!("--top: {}px; --left: {}px; --background-color: {}", 
                        top_offset,
                        left_offset,

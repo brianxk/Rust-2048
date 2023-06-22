@@ -204,10 +204,22 @@ impl Game {
         }
     }
 
+    /// Sets the `merged` field to false for all Tiles before any move is calculated.
+    fn reset_merged_flags(&mut self) {
+        for row in 0..BOARD_DIMENSION {
+            for col in 0..BOARD_DIMENSION {
+                if self.board[row][col].is_some() {
+                    self.board[row][col].as_mut().unwrap().merged = false;
+                }
+            }
+        }
+    }
+
     /// Receives the user's input and slides tiles in the specified direction.
     pub fn receive_input(&mut self, input: &str) -> InputResult {
         let mut move_occurred = false;
         let mut recycled_ids: Vec<usize> = Vec::new();
+        self.reset_merged_flags();
 
         // i in the loops below represents the index difference between the Tile's starting slot
         // and its destination slot.
@@ -230,7 +242,9 @@ impl Game {
 
                             // If no underflow occurs, there must be another tile present: perform
                             // merging logic.
-                            if row.checked_sub(i).is_some_and(|diff| self.board[diff][col].as_ref().unwrap().value == tile.value) {
+
+                            // Double merges should not be allowed e.g. [2, 2, 2, 2] -> [0, 0, 4, 4] is a correct merge.
+                            if row.checked_sub(i).is_some_and(|diff| self.board[diff][col].as_ref().unwrap().value == tile.value && !self.board[diff][col].as_ref().unwrap().merged) {
                                 let merged_tile = self.board[row - i][col].take().unwrap();
                                 recycled_ids.push(merged_tile.id);
                                 
