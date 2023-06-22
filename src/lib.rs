@@ -207,6 +207,7 @@ impl Game {
     /// Receives the user's input and slides tiles in the specified direction.
     pub fn receive_input(&mut self, input: &str) -> InputResult {
         let mut move_occurred = false;
+        let mut recycled_ids: Vec<usize> = Vec::new();
 
         // i in the loops below represents the index difference between the Tile's starting slot
         // and its destination slot.
@@ -218,17 +219,34 @@ impl Game {
                     for row in 1..BOARD_DIMENSION {
                         let mut i = 1;
 
-                        if let Some(tile) = self.board[row][col].take() {
+                        if let Some(mut tile) = self.board[row][col].take() {
                             // Loop until an occupied cell is found.
                             while row.checked_sub(i).is_some_and(|diff| self.board[diff][col].is_none()) {
                                 i += 1;
                             }
 
-                            if i > 1 {
-                                move_occurred = true;
-                            }
+                            // If subtraction causes an underflow, there is no tile between current
+                            // tile and the board edge; slide the current tile to its destination.
 
-                            self.update_tile_and_board(tile, row - (i - 1), col);
+                            // If no underflow occurs, there must be another tile present: perform
+                            // merging logic.
+                            if row.checked_sub(i).is_some_and(|diff| self.board[diff][col].as_ref().unwrap().value == tile.value) {
+                                let merged_tile = self.board[row - i][col].take().unwrap();
+                                recycled_ids.push(merged_tile.id);
+                                
+                                tile.merged = true;
+                                tile.value = tile.value * 2;
+                                self.update_tile_and_board(tile, merged_tile.row, merged_tile.col);
+                                move_occurred = true;
+                                // TODO: update background color to reflect the new value
+                                // TODO: set all merged values to false at every turn
+                            } else {
+                                self.update_tile_and_board(tile, row - (i - 1), col);
+
+                                if i > 1 {
+                                    move_occurred = true;
+                                }
+                            }
                         }
                     }
                 }
@@ -296,13 +314,14 @@ impl Game {
         match move_occurred {
             true => match self.get_random_free_slot() {
                 Some((i, j)) => {
+                    // New tile ID should not use the ID of a tile that was merged this turn.
                     let new_id = self.get_id().unwrap();
+                    self.recycle_ids(recycled_ids);
+
                     let new_tile = Tile::new(self.generate_tile(), new_id, "lightcyan".to_string(), i, j);
                     self.board[i][j] = Some(new_tile);
                     // Create a systematic way to decide background color. Modulus?
                     // Consider re-doing the colorscheme of the board in this step.
-                    // Tile merging: If the destination tile has the same value, we merge them.
-                    // Need to figure out a way to have sequential animations. 
                     InputResult::Ok(new_id)
                 },
                 None => unreachable!(),
