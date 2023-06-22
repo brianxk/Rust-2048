@@ -2,7 +2,6 @@
     margin: 0;
     padding: 0;
     font-family: "Andale Mono", AndaleMono, monospace;
-    color: #003862;
 }
 
 html, body {
@@ -11,8 +10,7 @@ html, body {
     width: 500px;
     height: 100%;
     font-size: 1.0rem;
-    background-image: linear-gradient(#2D6CF6, #888F70);
-    /* background-image: linear-gradient(#888F70, #2D6CF6); */
+    background-image: linear-gradient(var(--gradient_top), var(--gradient_bot));
     background-repeat: no-repeat;
     background-attachment: fixed;
 }
@@ -24,6 +22,7 @@ body > * {
 div.header {
     display: inline-block;
     height: 75px;
+    color: var(--header_text);
 }
 
 div.content {
@@ -38,12 +37,13 @@ div.metadata {
 div.metadata > * {
     position: absolute;
     bottom: 15px;
-    border: solid 1px #003862;
+    border: solid 1px var(--button_border);
     border-radius: 5px;
-    background-color: #6daed0;
+    background-color: var(--button_background);
     height: 35px;
     width: 130px;
     font-size: 1.15em;
+    color: var(--button_text);
 }
 
 .score {
@@ -55,11 +55,10 @@ div.metadata > * {
 div.metadata > .new-game {
     right: 0px;
     width: 125px;
-    border: outset 1px #003862;
 }
 
 .new-game:hover {
-    background-color: #84bbd7;
+    background-color: var(--button_hover);
 }
 
 div.board-container {
@@ -69,6 +68,7 @@ div.board-container {
 
 div.footer {
     height: 75px;
+    color: var(--footer_text);
 }
 
 table {
@@ -93,7 +93,7 @@ table {
     position: absolute;
     top: var(--top);
     left: var(--left);
-    background-color: var(--background-color);
+    background-color: var(--background_color);
     animation: expand-init 0.25s ease-in-out;
 }
 
@@ -140,16 +140,6 @@ table {
 @keyframes blinking {
   0% {border-right-color: transparent}
 }
-
-.test {
-    position: absolute;
-    left: 50px;
-    top: 15px;
-}
-
-/* .animated { */
-/*     animation: sliding 0.5s linear forwards; */
-/* } */
 
 @keyframes sliding {
     0% {

@@ -1,3 +1,4 @@
+use gloo::utils::document;
 use yew::prelude::*;
 use rust_2048::*;
 use gloo_console::log;
@@ -11,15 +12,11 @@ use wasm_bindgen::prelude::wasm_bindgen;
 
 const BORDER_SPACING: u16 = 4;
 const TILE_DIMENSION: u16 = 120;
+const COLORS: Colors = Colors::new();
 
 #[wasm_bindgen(module = "/prevent_arrow_scrolling.js")]
 extern "C" {
     fn preventDefaultScrolling();
-}
-
-#[derive(Properties, PartialEq)]
-struct ScoreProps {
-    score: u64,
 }
 
 #[function_component(GameBoard)]
@@ -52,7 +49,7 @@ struct TileProps {
 
 #[function_component(Tile)]
 fn tile(props: &TileProps) -> Html {
-    let style_args = format!("--top: {}px; --left: {}px; --background-color: {}", 
+    let style_args = format!("--top: {}px; --left: {}px; --background_color: {}", 
                            props.top_offset,
                            props.left_offset,
                            props.background_color);
@@ -70,7 +67,7 @@ fn content() -> Html {
     let game_state_for_listener = Rc::clone(&game_state);
     let keypressed_for_keydown = Rc::new(RefCell::new(false));
     let keypressed_for_keyup = keypressed_for_keydown.clone();
-
+    
     use_effect(move || {
         // Attach a keydown event listener to the document.
         let document = gloo::utils::document();
@@ -175,7 +172,7 @@ fn content() -> Html {
                     let new_tile = get_tile_by_id(&tiles, new_tile_id).expect("New tile ID not found.");
                     let (top_offset, left_offset) = convert_to_pixels(new_tile.row, new_tile.col);
                     
-                    let style_args = format!("--top: {}px; --left: {}px; --background-color: {}", 
+                    let style_args = format!("--top: {}px; --left: {}px; --background_color: {}", 
                        top_offset,
                        left_offset,
                        &new_tile.background_color,
@@ -184,11 +181,11 @@ fn content() -> Html {
                     let new_tile_node = document.create_element("div").expect("Failed to create new tile node.");
                     new_tile_node.set_inner_html(&new_tile.value.to_string());
                     new_tile_node.set_class_name("tile cell");
-                    new_tile_node.set_attribute("style", &style_args);
+                    new_tile_node.set_attribute("style", &style_args).unwrap();
                     new_tile_node.set_id(&new_tile_id.to_string());
 
                     let board_container = document.query_selector(".board-container").unwrap().unwrap();
-                    board_container.append_child(&new_tile_node);
+                    board_container.append_child(&new_tile_node).unwrap();
 
 
                 },
@@ -217,9 +214,8 @@ fn content() -> Html {
         || drop(listener)
     });
 
-    // Not actually keeping track of the state of any variable.
-    // use_state is being used to trigger a re-render whenever the 'New Game' button is clicked.
-    // `true` is merely a placeholder value.
+    // use_state() hook is used to trigger a re-render whenever the `New Game` button is clicked.
+    // The value is used as a key to each Tile component in order to its `expand-init` animation.
     let new_game = use_state(|| 0);
     let onclick = {
         // Elements added via `append_child` do not get removed when this component is re-rendered.
@@ -241,9 +237,19 @@ fn content() -> Html {
         Callback::from(move |_| new_game.set(*new_game + 1))
     };
 
+    let metadata_style_args = format!("--button_border: {}; 
+                                      --button_background: {};
+                                      --button_hover: {};
+                                      --button_text: {};",
+                                      COLORS.text_dark,
+                                      COLORS.button,
+                                      COLORS.button_hover,
+                                      COLORS.text_dark,
+                                      );
+
     html! {
         <div class="content">
-            <div class="metadata">
+            <div class="metadata" style={metadata_style_args}>
                 <Score score={game_state.borrow().score}/>
                 <button class="new-game" onclick={onclick}>{ "New Game" }</button>
             </div>
@@ -275,6 +281,28 @@ fn content() -> Html {
     }
 }
 
+// TODO: Implement Metadata as its own function component.
+// #[derive(Properties, PartialEq)]
+// struct MetadataProps {
+//     callback: yew::callback::Callback::<{unknown}>,
+//     score: u64,
+// }
+
+// #[function_component(Metadata)]
+// fn metadata() -> Html {
+//     html! {
+//         <div class="metadata">
+//             <Score score={game_state.borrow().score}/>
+//             <button class="new-game" onclick={onclick}>{ "New Game" }</button>
+//         </div>
+//     }
+// }
+
+#[derive(Properties, PartialEq)]
+struct ScoreProps {
+    score: u64,
+}
+
 #[function_component(Score)]
 fn score(props: &ScoreProps) -> Html {
     html! {
@@ -284,8 +312,10 @@ fn score(props: &ScoreProps) -> Html {
 
 #[function_component(Header)]
 fn header() -> Html {
+    let style_args = format!("--header_text: {}", COLORS.text_dark);
+
     html! {
-        <div class="header">
+        <div class="header" style={style_args}>
             <br/>
             <h1 class="typed">{ "Welcome to 2048!" }</h1>
         </div>
@@ -294,8 +324,10 @@ fn header() -> Html {
 
 #[function_component(Footer)]
 fn footer() -> Html {
+    let style_args = format!("--footer_text: {}", COLORS.text_dark);
+
     html! {
-        <div class="footer">
+        <div class="footer" style={style_args}>
             <p>
                 { "This project is a Rust practice implementation of the "}
                 <a href="https://play2048.co/" target="_blank">
@@ -310,6 +342,8 @@ fn footer() -> Html {
 
 #[function_component(App)]
 fn app() -> Html {
+    set_background_colors();
+
     html! {
         <>
             <Header/>
@@ -361,6 +395,8 @@ fn pixel_to_index(pixel_value: u16) -> usize {
     }
 }
 
+/// Accepts a Vec of Tile references and an ID and returns an Option Tile with the corresponding ID if it
+/// is found, otherwise returns None.
 fn get_tile_by_id<'a>(tiles: &Vec<&'a rust_2048::Tile>, id: usize) -> Option<&'a rust_2048::Tile> {
     for tile in tiles {
         if tile.id == id {
@@ -369,5 +405,13 @@ fn get_tile_by_id<'a>(tiles: &Vec<&'a rust_2048::Tile>, id: usize) -> Option<&'a
     }
 
     None
+}
+
+/// Sets the background-image to a linear-gradient determined by the `Colors` struct defined in lib.rs.
+fn set_background_colors() {
+    let body = gloo::utils::body();
+
+    let linear_gradient = format!("linear-gradient({}, {})", COLORS.background_dark, COLORS.background_light);
+    body.style().set_property("background-image", &linear_gradient).unwrap();
 }
 

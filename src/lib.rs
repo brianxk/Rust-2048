@@ -37,15 +37,6 @@ impl std::fmt::Display for Tile {
     }
 }
 
-#[derive(PartialEq)]
-pub struct Game {
-    pub board: [[Option<Tile>; BOARD_DIMENSION]; BOARD_DIMENSION],
-    new_tile_params: NewTileParams,
-    free_slots: Vec<(usize, usize)>,
-    pub score: u64,
-    id_list: LinkedList<usize>,
-}
-
 /// Struct that holds the choices for new tiles and the probability with which they will appear.
 #[derive(PartialEq)]
 struct NewTileParams {
@@ -72,11 +63,63 @@ impl NewTileParams {
     }
 }
 
+#[derive(PartialEq)]
+pub struct Colors {
+    pub background_dark: &'static str,
+    pub background_light: &'static str,
+    pub text_dark: &'static str,
+    pub text_light: &'static str,
+    pub button: &'static str,
+    pub button_hover: &'static str,
+    pub board: &'static str,
+    pub cell: &'static str,
+    pub tile: &'static str,
+}
+
+impl Colors {
+    pub const fn new() -> Self {
+        Colors {
+            background_dark: "#2d6cf6",
+            background_light: "#888f70",
+            // text_dark: "#003862",
+            text_dark: "pink",
+            text_light: "#9ee8f5",
+            button: "#6daed0",
+            button_hover: "#84bbd7",
+            board: "#8f4439",
+            cell: "#dbbd7c",
+            tile: "#f5f5dc",
+        }
+    }
+}
+
+/*
+ * 2: white
+ * 4: beige
+ * 8: light orange
+ * 16 red orange
+ * 32: red
+ * 64: dark red
+ * 128: pale yellow
+ * 256: less pale yellow
+ * 512: yellow
+ * 1024: dark yellow
+ */
+
 pub struct InvalidMove;
 
 pub enum InputResult {
     Ok(usize),
     Err(InvalidMove),
+}
+
+#[derive(PartialEq)]
+pub struct Game {
+    pub board: [[Option<Tile>; BOARD_DIMENSION]; BOARD_DIMENSION],
+    new_tile_params: NewTileParams,
+    free_slots: Vec<(usize, usize)>,
+    pub score: u64,
+    id_list: LinkedList<usize>,
 }
 
 impl Game {
