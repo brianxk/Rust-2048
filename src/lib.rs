@@ -253,7 +253,6 @@ impl Game {
                                 self.update_tile_and_board(tile, merged_tile.row, merged_tile.col);
                                 move_occurred = true;
                                 // TODO: update background color to reflect the new value
-                                // TODO: set all merged values to false at every turn
                             } else {
                                 self.update_tile_and_board(tile, row - (i - 1), col);
 
@@ -270,16 +269,28 @@ impl Game {
                     for row in (0..BOARD_DIMENSION - 1).rev() {
                         let mut i = 1;
 
-                        if let Some(tile) = self.board[row][col].take() {
+                        if let Some(mut tile) = self.board[row][col].take() {
                             while row.checked_add_max(i, BOARD_DIMENSION).is_some_and(|sum| self.board[sum][col].is_none()) {
                                 i += 1;
                             }
 
-                            if i > 1 {
+                            // See comments for the "ArrowUp" case for an explanation of this merging logic
+                            if row.checked_add_max(i, BOARD_DIMENSION).is_some_and(|sum| self.board[sum][col].as_ref().unwrap().value == tile.value && !self.board[sum][col].as_ref().unwrap().merged) {
+                                let merged_tile = self.board[row + i][col].take().unwrap();
+                                recycled_ids.push(merged_tile.id);
+                                
+                                tile.merged = true;
+                                tile.value = tile.value * 2;
+                                self.update_tile_and_board(tile, merged_tile.row, merged_tile.col);
                                 move_occurred = true;
-                            }
+                                // TODO: update background color to reflect the new value
+                            } else {
+                                self.update_tile_and_board(tile, row + (i - 1), col);
 
-                            self.update_tile_and_board(tile, row + (i - 1), col);
+                                if i > 1 {
+                                    move_occurred = true;
+                                }
+                            }
                         }
                     }
                 }
@@ -289,16 +300,28 @@ impl Game {
                     for col in 1..BOARD_DIMENSION {
                         let mut i = 1;
 
-                        if let Some(tile) = self.board[row][col].take() {
+                        if let Some(mut tile) = self.board[row][col].take() {
                             while col.checked_sub(i).is_some_and(|diff| self.board[row][diff].is_none()) {
                                 i += 1
                             }
 
-                            if i > 1 {
+                            // See comments for the "ArrowUp" case for an explanation of this merging logic
+                            if col.checked_sub(i).is_some_and(|diff| self.board[row][diff].as_ref().unwrap().value == tile.value && !self.board[row][diff].as_ref().unwrap().merged) {
+                                let merged_tile = self.board[row][col - i].take().unwrap();
+                                recycled_ids.push(merged_tile.id);
+                                
+                                tile.merged = true;
+                                tile.value = tile.value * 2;
+                                self.update_tile_and_board(tile, merged_tile.row, merged_tile.col);
                                 move_occurred = true;
-                            }
+                                // TODO: update background color to reflect the new value
+                            } else {
+                                self.update_tile_and_board(tile, row, col - (i - 1));
 
-                            self.update_tile_and_board(tile, row, col - (i - 1));
+                                if i > 1 {
+                                    move_occurred = true;
+                                }
+                            }
                         }
                     }
                 }
@@ -306,18 +329,30 @@ impl Game {
             "ArrowRight" | "KeyL" | "KeyD" => {
                 for row in 0..BOARD_DIMENSION {
                     for col in (0..BOARD_DIMENSION - 1).rev() {
-                        if let Some(tile) = self.board[row][col].take() {
+                        if let Some(mut tile) = self.board[row][col].take() {
                             let mut i = 1;
 
                             while col.checked_add_max(i, BOARD_DIMENSION).is_some_and(|sum| self.board[row][sum].is_none()) {
                                 i += 1;
                             }
 
-                            if i > 1 {
+                            // See comments for the "ArrowUp" case for an explanation of this merging logic
+                            if col.checked_add_max(i, BOARD_DIMENSION).is_some_and(|sum| self.board[row][sum].as_ref().unwrap().value == tile.value && !self.board[row][sum].as_ref().unwrap().merged) {
+                                let merged_tile = self.board[row][col + i].take().unwrap();
+                                recycled_ids.push(merged_tile.id);
+                                
+                                tile.merged = true;
+                                tile.value = tile.value * 2;
+                                self.update_tile_and_board(tile, merged_tile.row, merged_tile.col);
                                 move_occurred = true;
-                            }
+                                // TODO: update background color to reflect the new value
+                            } else {
+                                self.update_tile_and_board(tile, row, col + (i - 1));
 
-                            self.update_tile_and_board(tile, row, col + (i - 1));
+                                if i > 1 {
+                                    move_occurred = true;
+                                }
+                            }
                         }
                     }
                 }
