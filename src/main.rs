@@ -70,7 +70,8 @@ fn tile(props: &TileProps) -> Html {
 #[function_component(Content)]
 fn content() -> Html {
     let game_state = Rc::new(RefCell::new(Game::new()));
-    let game_state_for_listener = Rc::clone(&game_state);
+    let game_state_for_move_listener = Rc::clone(&game_state);
+    let game_state_for_sliding_listener = Rc::clone(&game_state);
     let keypressed_for_keydown = Rc::new(RefCell::new(false));
     let keypressed_for_keyup = keypressed_for_keydown.clone();
     
@@ -95,7 +96,7 @@ fn content() -> Html {
             // Prevents use of arrow keys for scrolling the page
             preventDefaultScrolling();
 
-            let mut game_state_borrow_mut = game_state_for_listener.borrow_mut();
+            let mut game_state_borrow_mut = game_state_for_move_listener.borrow_mut();
 
             match game_state_borrow_mut.receive_input(&event.code()) {
                 InputResult::Ok(new_tile_id) => {
@@ -128,6 +129,14 @@ fn content() -> Html {
                                         tile.style().set_property("--new_left", &new_left_offset).unwrap();
                                         tile.style().set_property("--new_top", &new_top_offset).unwrap();
 
+                                        if updated_tile.merged {
+                                            // Will be used by callback that handles merge_expand animations
+                                            tile.style().set_property("--merged", &updated_tile.value.to_string()).unwrap();
+                                            log!("Merged:", tile.style().get_property_value("--merged").unwrap());
+                                            tile.style().set_property("--background_color", &updated_tile.background_color).unwrap();
+                                            tile.style().set_property("--text_color", &updated_tile.text_color).unwrap();
+                                        }
+
                                         let parent_node = tile.parent_node().unwrap();
                                         parent_node.remove_child(&tile).unwrap();
                                         parent_node.append_child(&tile).unwrap();
@@ -137,16 +146,6 @@ fn content() -> Html {
                                         tile.style().set_property("top", &new_top_offset).unwrap();
                                         tile.style().set_property("left", &new_left_offset).unwrap();
 
-                                        if updated_tile.merged {
-                                            tile.set_inner_html(&updated_tile.value.to_string());
-                                            tile.style().set_property("--background_color", &updated_tile.background_color).unwrap();
-                                            tile.style().set_property("--text_color", &updated_tile.text_color).unwrap();
-                                            tile.style().set_property("animation", "expand-merge 0.20s ease-in-out").unwrap();
-
-                                            let parent_node = tile.parent_node().unwrap();
-                                            parent_node.remove_child(&tile).unwrap();
-                                            parent_node.append_child(&tile).unwrap();
-                                        }
                                     },
                                     None => {
                                         // Tile with specified id was merged and should be removed.
@@ -158,23 +157,6 @@ fn content() -> Html {
                         }
                         Err(_) => log!("NodeList could not be found."),
                     }
-
-                    // match document.query_selector_all("[class='tile cell']") {
-                    //     Ok(node_list) => {
-                    //         for i in 0..node_list.length() {
-                    //             let node = node_list.get(i).unwrap();
-                    //             let tile = node.dyn_ref::<HtmlElement>().unwrap();
-                    //             let tile_id = tile.get_attribute("id").unwrap().parse::<usize>().unwrap();
-
-                    //             match get_tile_by_id(&tiles, tile_id) {
-                    //                 Some(updated_tile) => {
-                    //                 },
-                    //                 None => unreachable!(),
-                    //             }
-                    //         }
-                    //     },
-                    //     Err(_) => log!("NodeList could not be found."),
-                    // }
 
                     // Render the new tile
                     let new_tile = get_tile_by_id(&tiles, new_tile_id).expect("New tile ID not found.");
@@ -227,10 +209,51 @@ fn content() -> Html {
     // Add event listener for sliding animation end to then begin the expanding animation for merged tiles.
     let body = gloo::utils::body();
     let merge_expand = Closure::wrap(Box::new(move |event: AnimationEvent| {
-        
+        if event.animation_name() == "sliding" {
+            let event_target = event.target().expect("No event target found.");
+            let tile = event_target.dyn_ref::<HtmlElement>().unwrap();
+
+            let computed_style = window().unwrap().get_computed_style(&tile).unwrap().unwrap();
+
+            match tile.style().get_property_value("--merged") {
+                Ok(merged) => {
+                    if merged != "-1" && merged != "" {
+                        
+                        tile.set_inner_html(&merged);
+                        tile.style().set_property("animation", "expand-merge 0.15s ease-in-out").unwrap();
+
+                        let parent_node = tile.parent_node().unwrap();
+                        parent_node.remove_child(&tile).unwrap();
+                        parent_node.append_child(&tile).unwrap();
+
+                        tile.style().set_property("--merged", "-1").unwrap();
+                    }
+                },
+                Err(_) => (),
+            }
+
+            // let tile_id = tile.get_attribute("id").unwrap().parse::<usize>().expect("Failed to parse id as usize.");
+            // let tiles = game_state_for_sliding_listener.borrow();
+            // let tiles = tiles.get_tiles();
+
+            // match get_tile_by_id(&tiles, tile_id) {
+            //     Some(tile_ref) => {
+            //         if tile_ref.merged {
+            //             tile.style().set_property("animation", "expand-merge 0.20s ease-in-out").unwrap();
+
+            //             let parent_node = tile.parent_node().unwrap();
+            //             parent_node.remove_child(&tile).unwrap();
+            //             parent_node.append_child(&tile).unwrap();
+            //         }
+                    
+            //     },
+            //     None => (),
+            // }
+        }
     }) as Box<dyn FnMut(AnimationEvent)>);
 
     body.add_event_listener_with_callback("animationend", merge_expand.as_ref().unchecked_ref()).unwrap();
+    merge_expand.forget();
 
     // use_state() hook is used to trigger a re-render whenever the `New Game` button is clicked.
     // The value is used as a key to each Tile component in order to its `expand-init` animation.
