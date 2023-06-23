@@ -129,10 +129,10 @@ fn content() -> Html {
                                         tile.style().set_property("--new_left", &new_left_offset).unwrap();
                                         tile.style().set_property("--new_top", &new_top_offset).unwrap();
 
-                                        if updated_tile.merged {
+                                        if !updated_tile.merged.is_empty() {
                                             // Will be used by callback that handles merge_expand animations
-                                            tile.style().set_property("--merged", &updated_tile.value.to_string()).unwrap();
-                                            log!("Merged:", tile.style().get_property_value("--merged").unwrap());
+                                            tile.style().set_property("--merged_value", &updated_tile.value.to_string()).unwrap();
+                                            tile.style().set_property("--merged_id", &updated_tile.merged).unwrap();
                                             tile.style().set_property("--background_color", &updated_tile.background_color).unwrap();
                                             tile.style().set_property("--text_color", &updated_tile.text_color).unwrap();
                                         }
@@ -141,7 +141,7 @@ fn content() -> Html {
                                         parent_node.remove_child(&tile).unwrap();
                                         parent_node.append_child(&tile).unwrap();
 
-                                        tile.style().set_property("animation", "sliding 0.90s ease-in-out forwards").unwrap();
+                                        tile.style().set_property("animation", "sliding 0.10s ease-in-out forwards").unwrap();
 
                                         tile.style().set_property("top", &new_top_offset).unwrap();
                                         tile.style().set_property("left", &new_left_offset).unwrap();
@@ -149,8 +149,8 @@ fn content() -> Html {
                                     },
                                     None => {
                                         // Tile with specified id was merged and should be removed.
-                                        let parent_node = tile.parent_node().unwrap();
-                                        parent_node.remove_child(&tile).unwrap();
+                                        // let parent_node = tile.parent_node().unwrap();
+                                        // parent_node.remove_child(&tile).unwrap();
                                     }
                                 }
                             }
@@ -213,11 +213,9 @@ fn content() -> Html {
             let event_target = event.target().expect("No event target found.");
             let tile = event_target.dyn_ref::<HtmlElement>().unwrap();
 
-            let computed_style = window().unwrap().get_computed_style(&tile).unwrap().unwrap();
-
-            match tile.style().get_property_value("--merged") {
+            match tile.style().get_property_value("--merged_value") {
                 Ok(merged) => {
-                    if merged != "-1" && merged != "" {
+                    if !merged.is_empty() {
                         
                         tile.set_inner_html(&merged);
                         tile.style().set_property("animation", "expand-merge 0.15s ease-in-out").unwrap();
@@ -225,8 +223,16 @@ fn content() -> Html {
                         let parent_node = tile.parent_node().unwrap();
                         parent_node.remove_child(&tile).unwrap();
                         parent_node.append_child(&tile).unwrap();
+                        
+                        // Remove merged Tile from the board.
+                        let document = gloo::utils::document();
+                        let merged_tile_id = tile.style().get_property_value("--merged_id").unwrap();
+                        let merged_tile_id = convert_id_unicode(&merged_tile_id);
+                        let merged_tile = document.query_selector(&merged_tile_id).unwrap().expect(&( "Failed to find ID".to_owned() + &merged_tile_id ));
+                        let merged_tile = merged_tile.dyn_ref::<HtmlElement>().unwrap();
+                        parent_node.remove_child(&merged_tile).unwrap();
 
-                        tile.style().set_property("--merged", "-1").unwrap();
+                        tile.style().set_property("--merged_value", "").unwrap();
                     }
                 },
                 Err(_) => (),
@@ -455,5 +461,15 @@ fn set_background_colors() {
 
     let linear_gradient = format!("linear-gradient({}, {})", COLORS.background_dark, COLORS.background_light);
     body.style().set_property("background-image", &linear_gradient).unwrap();
+}
+
+fn convert_id_unicode(id: &String) -> String {
+    let mut converted_id = String::from("#\\3");
+
+    for c in id.chars() {
+        converted_id.push_str(&(c.to_string() + " "));
+    }
+
+    converted_id
 }
 

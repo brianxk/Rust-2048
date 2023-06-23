@@ -19,7 +19,7 @@ pub struct Tile {
     pub text_color: String,
     pub row: usize,
     pub col: usize,
-    pub merged: bool,
+    pub merged: String,
 }
 
 impl Tile {
@@ -31,7 +31,7 @@ impl Tile {
             text_color,
             row,
             col,
-            merged: false,
+            merged: String::new(),
         }
     }
 }
@@ -260,7 +260,7 @@ impl Game {
         for row in 0..BOARD_DIMENSION {
             for col in 0..BOARD_DIMENSION {
                 if self.board[row][col].is_some() {
-                    self.board[row][col].as_mut().unwrap().merged = false;
+                    self.board[row][col].as_mut().unwrap().merged = String::new();
                 }
             }
         }
@@ -295,11 +295,11 @@ impl Game {
                             // merging logic.
 
                             // Double merges should not be allowed e.g. [2, 2, 2, 2] -> [0, 0, 4, 4] is a correct merge.
-                            if row.checked_sub(i).is_some_and(|diff| self.board[diff][col].as_ref().unwrap().value == tile.value && !self.board[diff][col].as_ref().unwrap().merged) {
+                            if row.checked_sub(i).is_some_and(|diff| self.board[diff][col].as_ref().unwrap().value == tile.value && self.board[diff][col].as_ref().unwrap().merged.is_empty()) {
                                 let merged_tile = self.board[row - i][col].take().unwrap();
+                                tile.merged = merged_tile.id.to_string();
                                 recycled_ids.push(merged_tile.id);
-                                
-                                tile.merged = true;
+
                                 tile.value = tile.value * 2;
                                 tile.background_color = self.get_tile_colors(tile.value).0;
                                 self.update_tile_and_board(tile, merged_tile.row, merged_tile.col);
@@ -326,11 +326,11 @@ impl Game {
                             }
 
                             // See comments for the "ArrowUp" case for an explanation of this merging logic
-                            if row.checked_add_max(i, BOARD_DIMENSION).is_some_and(|sum| self.board[sum][col].as_ref().unwrap().value == tile.value && !self.board[sum][col].as_ref().unwrap().merged) {
+                            if row.checked_add_max(i, BOARD_DIMENSION).is_some_and(|sum| self.board[sum][col].as_ref().unwrap().value == tile.value && self.board[sum][col].as_ref().unwrap().merged.is_empty()) {
                                 let merged_tile = self.board[row + i][col].take().unwrap();
+                                tile.merged = merged_tile.id.to_string();
                                 recycled_ids.push(merged_tile.id);
                                 
-                                tile.merged = true;
                                 tile.value = tile.value * 2;
                                 tile.background_color = self.get_tile_colors(tile.value).0;
                                 self.update_tile_and_board(tile, merged_tile.row, merged_tile.col);
@@ -357,11 +357,11 @@ impl Game {
                             }
 
                             // See comments for the "ArrowUp" case for an explanation of this merging logic
-                            if col.checked_sub(i).is_some_and(|diff| self.board[row][diff].as_ref().unwrap().value == tile.value && !self.board[row][diff].as_ref().unwrap().merged) {
+                            if col.checked_sub(i).is_some_and(|diff| self.board[row][diff].as_ref().unwrap().value == tile.value && self.board[row][diff].as_ref().unwrap().merged.is_empty()) {
                                 let merged_tile = self.board[row][col - i].take().unwrap();
+                                tile.merged = merged_tile.id.to_string();
                                 recycled_ids.push(merged_tile.id);
-                                
-                                tile.merged = true;
+
                                 tile.value = tile.value * 2;
                                 tile.background_color = self.get_tile_colors(tile.value).0;
                                 self.update_tile_and_board(tile, merged_tile.row, merged_tile.col);
@@ -389,11 +389,11 @@ impl Game {
                             }
 
                             // See comments for the "ArrowUp" case for an explanation of this merging logic
-                            if col.checked_add_max(i, BOARD_DIMENSION).is_some_and(|sum| self.board[row][sum].as_ref().unwrap().value == tile.value && !self.board[row][sum].as_ref().unwrap().merged) {
+                            if col.checked_add_max(i, BOARD_DIMENSION).is_some_and(|sum| self.board[row][sum].as_ref().unwrap().value == tile.value && self.board[row][sum].as_ref().unwrap().merged.is_empty()) {
                                 let merged_tile = self.board[row][col + i].take().unwrap();
+                                tile.merged = merged_tile.id.to_string();
                                 recycled_ids.push(merged_tile.id);
                                 
-                                tile.merged = true;
                                 tile.value = tile.value * 2;
                                 tile.background_color = self.get_tile_colors(tile.value).0;
                                 self.update_tile_and_board(tile, merged_tile.row, merged_tile.col);
@@ -446,7 +446,7 @@ impl Game {
 
     /// Returns tuple of (background_color, text_color) based on tile_value input.
     fn get_tile_colors(&self, tile_value: u32) -> (String, String) {
-        let base_colors: [(&str); 3] = ["lightblue",
+        let base_colors: [&str; 3] = ["lightblue",
                                         "pink",
                                         "#F9D949"];
 
