@@ -137,7 +137,6 @@ fn content() -> Html {
                                         tile.style().set_property("left", &new_left_offset).unwrap();
 
                                         if updated_tile.merged {
-                                            log!("animation logic here");
                                             tile.set_inner_html(&updated_tile.value.to_string());
                                             tile.style().set_property("--background_color", &updated_tile.background_color).unwrap();
                                             tile.style().set_property("--text_color", &updated_tile.text_color).unwrap();
