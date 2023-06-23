@@ -9,6 +9,7 @@ const NUM_TILES: usize = BOARD_DIMENSION * BOARD_DIMENSION;
 // 2. Reduce font size for larger numbers - find a way to tie the font size to the cell width.
 // 3. Include link to source code.
 // 4. Improve color scheme - develop a color changing algorithm.
+// 5. Refactor frontend so that tile deletion occurs after the merge occurs.
 
 #[derive(PartialEq, Clone)]
 pub struct Tile {
