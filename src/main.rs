@@ -21,14 +21,17 @@ extern "C" {
 
 #[function_component(GameBoard)]
 fn game_board() -> Html {
+    let table_style = format!("--table_background: {};", COLORS.board);
+    let cell_style = format!("--cell_background: {};", COLORS.cell);
+
     html! {
-        <table>
+        <table style={table_style}>
             { for (0..BOARD_DIMENSION).map(|_| {
                  html! {
                      <tr>
                          { for (0..BOARD_DIMENSION).map(|_| {
                              html! {
-                                 <td class="cell"/>
+                                 <td class="cell" style={cell_style.clone()}/>
                              }
                          })}
                      </tr>
@@ -43,16 +46,18 @@ struct TileProps {
     value: u32,
     id: usize,
     background_color: String,
+    text_color: String,
     left_offset: u16,
     top_offset: u16,
 }
 
 #[function_component(Tile)]
 fn tile(props: &TileProps) -> Html {
-    let style_args = format!("--top: {}px; --left: {}px; --background_color: {}", 
+    let style_args = format!("--top: {}px; --left: {}px; --background_color: {}; --text_color: {}", 
                            props.top_offset,
                            props.left_offset,
-                           props.background_color);
+                           props.background_color,
+                           props.text_color);
 
     let tile_id = props.id.to_string();
 
@@ -133,6 +138,8 @@ fn content() -> Html {
 
                                         if updated_tile.merged {
                                             tile.set_inner_html(&updated_tile.value.to_string());
+                                            tile.style().set_property("--background_color", &updated_tile.background_color).unwrap();
+                                            tile.style().set_property("--text_color", &updated_tile.text_color).unwrap();
                                             tile.style().set_property("animation", "expand-merge 0.20s ease-in-out").unwrap();
 
                                             let parent_node = tile.parent_node().unwrap();
@@ -179,15 +186,17 @@ fn content() -> Html {
                     );
 
                     let new_tile_node = document.create_element("div").expect("Failed to create new tile node.");
+                    let new_tile_node = new_tile_node.dyn_ref::<HtmlElement>().unwrap();
+
                     new_tile_node.set_inner_html(&new_tile.value.to_string());
                     new_tile_node.set_class_name("tile cell");
                     new_tile_node.set_attribute("style", &style_args).unwrap();
                     new_tile_node.set_id(&new_tile_id.to_string());
+                    new_tile_node.style().set_property("--background_color", &new_tile.background_color).unwrap();
+                    new_tile_node.style().set_property("--text_color", &new_tile.text_color).unwrap();
 
                     let board_container = document.query_selector(".board-container").unwrap().unwrap();
                     board_container.append_child(&new_tile_node).unwrap();
-
-
                 },
                 InputResult::Err(InvalidMove) => {
                     log!("Move unsuccessful");
@@ -246,6 +255,7 @@ fn content() -> Html {
                     for game_state.borrow().get_tiles().iter().map(|tile| {
                         let value = tile.value;
                         let background_color = tile.background_color.clone();
+                        let text_color = tile.text_color.clone();
                         let id = tile.id;
                         let (top_offset, left_offset) = 
                             convert_to_pixels(tile.row, tile.col);
@@ -256,6 +266,7 @@ fn content() -> Html {
                                 key={animation_key}
                                 value={value}
                                 background_color={background_color}
+                                text_color={text_color}
                                 id={id}
                                 top_offset={top_offset}
                                 left_offset={left_offset}
@@ -310,19 +321,20 @@ fn score(props: &ScoreProps) -> Html {
 
 #[function_component(Header)]
 fn header() -> Html {
-    let style_args = format!("--header_text: {}", COLORS.text_dark);
+    let header_style = format!("--header_text: {}", COLORS.text_light);
+    let cursor_style = format!("--blinking_cursor: {}", COLORS.text_light);
 
     html! {
-        <div class="header" style={style_args}>
+        <div class="header" style={header_style}>
             <br/>
-            <h1 class="typed">{ "Welcome to 2048!" }</h1>
+            <h1 class="typed" style={cursor_style}>{ "Welcome to 2048!" }</h1>
         </div>
     }
 }
 
 #[function_component(Footer)]
 fn footer() -> Html {
-    let style_args = format!("--footer_text: {}", COLORS.text_dark);
+    let style_args = format!("--footer_text: {}", COLORS.text_light);
 
     html! {
         <div class="footer" style={style_args}>

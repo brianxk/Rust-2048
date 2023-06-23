@@ -4,22 +4,30 @@ use std::collections::LinkedList;
 pub const BOARD_DIMENSION: usize = 4;
 const NUM_TILES: usize = BOARD_DIMENSION * BOARD_DIMENSION;
 
-#[derive(PartialEq)]
+// TODO:
+// 1. Implement score.
+// 2. Reduce font size for larger numbers - find a way to tie the font size to the cell width.
+// 3. Include link to source code.
+// 4. Improve color scheme - develop a color changing algorithm.
+
+#[derive(PartialEq, Clone)]
 pub struct Tile {
     pub value: u32,
     pub id: usize,
     pub background_color: String,
+    pub text_color: String,
     pub row: usize,
     pub col: usize,
     pub merged: bool,
 }
 
 impl Tile {
-    fn new(value: u32, id: usize, background_color: String, row: usize, col: usize) -> Tile {
+    fn new(value: u32, id: usize, background_color: String, text_color: String, row: usize, col: usize) -> Tile {
         Tile {
             value,
             id,
             background_color,
+            text_color,
             row,
             col,
             merged: false,
@@ -73,38 +81,23 @@ pub struct Colors {
     pub button_hover: &'static str,
     pub board: &'static str,
     pub cell: &'static str,
-    pub tile: &'static str,
+    // Tile's color will be determined within the `Game` struct based on the Tile's individual value.
 }
 
 impl Colors {
     pub const fn new() -> Self {
         Colors {
-            background_dark: "#2d6cf6",
-            background_light: "#888f70",
-            // text_dark: "#003862",
-            text_dark: "pink",
-            text_light: "#9ee8f5",
-            button: "#6daed0",
-            button_hover: "#84bbd7",
-            board: "#8f4439",
-            cell: "#dbbd7c",
-            tile: "#f5f5dc",
+            background_dark: "#3C486B",
+            background_light: "#3C486B",
+            text_dark: "#3C486B",
+            text_light: "#f24660",
+            button: "#F0F0F0",
+            button_hover: "#bcbccc",
+            board: "#F0F0F0",
+            cell: "#bcbccc",
         }
     }
 }
-
-/*
- * 2: white
- * 4: beige
- * 8: light orange
- * 16 red orange
- * 32: red
- * 64: dark red
- * 128: pale yellow
- * 256: less pale yellow
- * 512: yellow
- * 1024: dark yellow
- */
 
 pub struct InvalidMove;
 
@@ -149,23 +142,39 @@ impl Game {
 
         // If first tile is 4, second tile must be 2.
         // If first tile is 2, second tile may either be 2 or 4.
-        let first_tile_value = game.generate_tile();
+        let first_tile_value = game.generate_tile_value();
         let second_tile_value;
         
         if first_tile_value == game.new_tile_params.tile_choices[NewTileParams::FOUR] {
             second_tile_value = game.new_tile_params.tile_choices[NewTileParams::TWO];
         } else {
-            second_tile_value = game.generate_tile();
+            second_tile_value = game.generate_tile_value();
         }
 
         let first_tile_pos = game.get_random_free_slot().expect("New game board, should not panic.");
         let first_tile_id = game.get_id().unwrap();
-        let first_tile = Tile::new(first_tile_value, first_tile_id, "pink".to_string(), first_tile_pos.0, first_tile_pos.1);
+        let (background_color, text_color) = game.get_tile_colors(first_tile_value);
+
+        let first_tile = Tile::new(first_tile_value,
+                                   first_tile_id, 
+                                   background_color,
+                                   text_color,
+                                   first_tile_pos.0,
+                                   first_tile_pos.1);
+
         game.board[first_tile_pos.0][first_tile_pos.1] = Some(first_tile);
         
         let second_tile_pos = game.get_random_free_slot().expect("New game board, should not panic.");
         let second_tile_id = game.get_id().unwrap();
-        let second_tile = Tile::new(second_tile_value, second_tile_id, "pink".to_string(), second_tile_pos.0, second_tile_pos.1);
+        let (background_color, text_color) = game.get_tile_colors(second_tile_value);
+
+        let second_tile = Tile::new(second_tile_value,
+                                    second_tile_id,
+                                    background_color,
+                                    text_color,
+                                    second_tile_pos.0,
+                                    second_tile_pos.1);
+
         game.board[second_tile_pos.0][second_tile_pos.1] = Some(second_tile);
 
         game
@@ -185,7 +194,7 @@ impl Game {
 
     /// Generates a new tile - either 2 or 4 according to the weights defined in
     /// `self.new_tile_params`
-    fn generate_tile(&self) -> u32 {
+    fn generate_tile_value(&self) -> u32 {
         let mut rng = rand::thread_rng();
         let dist = WeightedIndex::new(self.new_tile_params.tile_weights).unwrap();
 
@@ -291,9 +300,9 @@ impl Game {
                                 
                                 tile.merged = true;
                                 tile.value = tile.value * 2;
+                                tile.background_color = self.get_tile_colors(tile.value).0;
                                 self.update_tile_and_board(tile, merged_tile.row, merged_tile.col);
                                 move_occurred = true;
-                                // TODO: update background color to reflect the new value
                             } else {
                                 self.update_tile_and_board(tile, row - (i - 1), col);
 
@@ -322,9 +331,9 @@ impl Game {
                                 
                                 tile.merged = true;
                                 tile.value = tile.value * 2;
+                                tile.background_color = self.get_tile_colors(tile.value).0;
                                 self.update_tile_and_board(tile, merged_tile.row, merged_tile.col);
                                 move_occurred = true;
-                                // TODO: update background color to reflect the new value
                             } else {
                                 self.update_tile_and_board(tile, row + (i - 1), col);
 
@@ -353,6 +362,7 @@ impl Game {
                                 
                                 tile.merged = true;
                                 tile.value = tile.value * 2;
+                                tile.background_color = self.get_tile_colors(tile.value).0;
                                 self.update_tile_and_board(tile, merged_tile.row, merged_tile.col);
                                 move_occurred = true;
                                 // TODO: update background color to reflect the new value
@@ -384,9 +394,9 @@ impl Game {
                                 
                                 tile.merged = true;
                                 tile.value = tile.value * 2;
+                                tile.background_color = self.get_tile_colors(tile.value).0;
                                 self.update_tile_and_board(tile, merged_tile.row, merged_tile.col);
                                 move_occurred = true;
-                                // TODO: update background color to reflect the new value
                             } else {
                                 self.update_tile_and_board(tile, row, col + (i - 1));
 
@@ -408,7 +418,10 @@ impl Game {
                     let new_id = self.get_id().unwrap();
                     self.recycle_ids(recycled_ids);
 
-                    let new_tile = Tile::new(self.generate_tile(), new_id, "lightcyan".to_string(), i, j);
+                    let new_tile_value = self.generate_tile_value();
+                    let (tile_background, tile_text) = self.get_tile_colors(new_tile_value);
+
+                    let new_tile = Tile::new(self.generate_tile_value(), new_id, tile_background, tile_text, i, j);
                     self.board[i][j] = Some(new_tile);
                     // Create a systematic way to decide background color. Modulus?
                     // Consider re-doing the colorscheme of the board in this step.
@@ -428,6 +441,23 @@ impl Game {
         tile.col = new_col;
 
         self.board[new_row][new_col] = Some(tile);
+    }
+
+    /// Returns tuple of (background_color, text_color) based on tile_value input.
+    fn get_tile_colors(&self, tile_value: u32) -> (String, String) {
+        let base_colors: [(&str); 3] = ["lightblue",
+                                        "pink",
+                                        "#F9D949"];
+
+        let power_of_2 = (tile_value as f32).log2() as u32;
+
+        let tile_color = match power_of_2 {
+            0..=4 => base_colors[0],
+            5..=8 => base_colors[1],
+            _ => base_colors[2],
+        };
+
+        (tile_color.to_string(), "#3C486B".to_string())
     }
 }
 
@@ -470,7 +500,7 @@ mod tests {
             const SAMPLE_SIZE: u32 = 10000;
 
             for _ in 0..SAMPLE_SIZE {
-                let tile = game.generate_tile();
+                let tile = game.generate_tile_value();
 
                 if tile == game.new_tile_params.tile_choices[NewTileParams::TWO] {
                     two_count += 1;
@@ -512,7 +542,7 @@ mod tests {
 
             match coord {
                 Some((row, col)) => game.board[row][col] = 
-                    Some(Tile::new(0, 0, "orange".to_string(), row, col)),
+                    Some(Tile::new(0, 0, "orange".to_string(), "pink".to_string(), row, col)),
                 None => panic!("Game board filled up unexpectedly."),
             }
         }
