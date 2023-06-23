@@ -9,6 +9,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use substring::Substring;
 use wasm_bindgen::prelude::wasm_bindgen;
+use wasm_bindgen::closure::Closure;
 
 const BORDER_SPACING: u16 = 4;
 const TILE_DIMENSION: u16 = 120;
@@ -131,13 +132,12 @@ fn content() -> Html {
                                         parent_node.remove_child(&tile).unwrap();
                                         parent_node.append_child(&tile).unwrap();
 
-                                        tile.style().set_property("animation", "sliding 0.10s ease-in-out forwards").unwrap();
+                                        tile.style().set_property("animation", "sliding 0.90s ease-in-out forwards").unwrap();
 
                                         tile.style().set_property("top", &new_top_offset).unwrap();
                                         tile.style().set_property("left", &new_left_offset).unwrap();
 
                                         if updated_tile.merged {
-                                            log!("testing branches here");
                                             tile.set_inner_html(&updated_tile.value.to_string());
                                             tile.style().set_property("--background_color", &updated_tile.background_color).unwrap();
                                             tile.style().set_property("--text_color", &updated_tile.text_color).unwrap();
@@ -223,6 +223,14 @@ fn content() -> Html {
 
         || drop(listener)
     });
+
+    // Add event listener for sliding animation end to then begin the expanding animation for merged tiles.
+    let body = gloo::utils::body();
+    let merge_expand = Closure::wrap(Box::new(move |event: AnimationEvent| {
+        
+    }) as Box<dyn FnMut(AnimationEvent)>);
+
+    body.add_event_listener_with_callback("animationend", merge_expand.as_ref().unchecked_ref()).unwrap();
 
     // use_state() hook is used to trigger a re-render whenever the `New Game` button is clicked.
     // The value is used as a key to each Tile component in order to its `expand-init` animation.
