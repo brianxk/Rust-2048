@@ -1,4 +1,3 @@
-use gloo::utils::document;
 use yew::prelude::*;
 use rust_2048::*;
 use gloo_console::log;
@@ -133,8 +132,8 @@ fn content() -> Html {
                                             // Will be used by callback that handles merge_expand animations
                                             tile.style().set_property("--merged_value", &updated_tile.value.to_string()).unwrap();
                                             tile.style().set_property("--merged_id", &updated_tile.merged).unwrap();
-                                            tile.style().set_property("--background_color", &updated_tile.background_color).unwrap();
-                                            tile.style().set_property("--text_color", &updated_tile.text_color).unwrap();
+                                            tile.style().set_property("--bg_color", &updated_tile.background_color).unwrap();
+                                            tile.style().set_property("--txt_color", &updated_tile.text_color).unwrap();
                                         }
 
                                         let parent_node = tile.parent_node().unwrap();
@@ -217,8 +216,12 @@ fn content() -> Html {
                 Ok(merged) => {
                     if !merged.is_empty() {
                         
+                        let new_background_color = tile.style().get_property_value("--bg_color").unwrap();
+                        let new_text_color = tile.style().get_property_value("--txt_color").unwrap();
                         tile.set_inner_html(&merged);
-                        tile.style().set_property("animation", "expand-merge 0.15s ease-in-out").unwrap();
+                        tile.style().set_property("--background_color", &new_background_color).unwrap();
+                        tile.style().set_property("--text_color", &new_text_color).unwrap();
+                        tile.style().set_property("animation", "expand-merge 0.10s ease-in-out").unwrap();
 
                         let parent_node = tile.parent_node().unwrap();
                         parent_node.remove_child(&tile).unwrap();
@@ -237,24 +240,6 @@ fn content() -> Html {
                 },
                 Err(_) => (),
             }
-
-            // let tile_id = tile.get_attribute("id").unwrap().parse::<usize>().expect("Failed to parse id as usize.");
-            // let tiles = game_state_for_sliding_listener.borrow();
-            // let tiles = tiles.get_tiles();
-
-            // match get_tile_by_id(&tiles, tile_id) {
-            //     Some(tile_ref) => {
-            //         if tile_ref.merged {
-            //             tile.style().set_property("animation", "expand-merge 0.20s ease-in-out").unwrap();
-
-            //             let parent_node = tile.parent_node().unwrap();
-            //             parent_node.remove_child(&tile).unwrap();
-            //             parent_node.append_child(&tile).unwrap();
-            //         }
-                    
-            //     },
-            //     None => (),
-            // }
         }
     }) as Box<dyn FnMut(AnimationEvent)>);
 

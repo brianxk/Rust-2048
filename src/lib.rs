@@ -1,5 +1,6 @@
 use rand::{distributions::WeightedIndex, prelude::Distribution, seq::SliceRandom};
 use std::collections::LinkedList;
+use hex_color::HexColor;
 
 pub const BOARD_DIMENSION: usize = 4;
 const NUM_TILES: usize = BOARD_DIMENSION * BOARD_DIMENSION;
@@ -10,6 +11,8 @@ const NUM_TILES: usize = BOARD_DIMENSION * BOARD_DIMENSION;
 // 3. Include link to source code.
 // 4. Improve color scheme - develop a color changing algorithm.
 // 5. Refactor frontend so that tile deletion occurs after the merge occurs.
+// 6. Merged tiles need a copy of the old tile so the frontend knows how to move those prior to merging.
+// 7. Multithreading.
 
 #[derive(PartialEq, Clone)]
 pub struct Tile {
@@ -88,14 +91,18 @@ pub struct Colors {
 impl Colors {
     pub const fn new() -> Self {
         Colors {
-            background_dark: "#3C486B",
-            background_light: "#3C486B",
-            text_dark: "#3C486B",
-            text_light: "#f24660",
-            button: "#F0F0F0",
-            button_hover: "#bcbccc",
-            board: "#F0F0F0",
-            cell: "#bcbccc",
+            background_dark: "#2B2A4C",
+            background_light: "#2B2A4C",
+            text_dark: "#09080f",
+            text_light: "#EA906C",
+            button: "#BCBCCC",
+            button_hover: "#F0F0F0",
+            board: "#EA906C",
+            cell: "#BCBCCC",
+            // button: "#F0F0F0",
+            // button_hover: "#bcbccc",
+            // board: "#F0F0F0",
+            // cell: "#bcbccc",
         }
     }
 }
@@ -422,7 +429,7 @@ impl Game {
                     let new_tile_value = self.generate_tile_value();
                     let (tile_background, tile_text) = self.get_tile_colors(new_tile_value);
 
-                    let new_tile = Tile::new(self.generate_tile_value(), new_id, tile_background, tile_text, i, j);
+                    let new_tile = Tile::new(new_tile_value, new_id, tile_background, tile_text, i, j);
                     self.board[i][j] = Some(new_tile);
                     // Create a systematic way to decide background color. Modulus?
                     // Consider re-doing the colorscheme of the board in this step.
@@ -446,23 +453,66 @@ impl Game {
 
     /// Returns tuple of (background_color, text_color) based on tile_value input.
     fn get_tile_colors(&self, tile_value: u32) -> (String, String) {
-        let base_colors: [&str; 3] = ["lightblue",
-                                        "pink",
-                                        "#F9D949"];
+        let base_colors: [&str; 4] = [
+                                      "#FFD700", // Yellow
+                                      "#F50A40", // Orange
+                                      "#3949AB", // Blue
+                                      "#6A0DAD", // Purple
+                                      ];
 
-        let power_of_2 = (tile_value as f32).log2() as u32;
+        let num_interpolation_steps = 4;
 
-        let tile_color = match power_of_2 {
-            0..=4 => base_colors[0],
-            5..=8 => base_colors[1],
-            _ => base_colors[2],
-        };
+        // Minus 1 is because tiles start at 2^1 rather than 2^0.
+        let log_2 = (log_2(tile_value) - 1) as usize;
+        let base_color_index = (log_2 / base_colors.len()) % 4;
+        let saturation_offset = (log_2 % base_colors.len()) as f32;
 
-        (tile_color.to_string(), "#3C486B".to_string())
+        let other_color_index;
+
+        if base_color_index == base_colors.len() - 1 {
+            other_color_index = 0;
+        } else {
+            other_color_index = base_color_index + 1;
+        }
+
+        let base_color = HexColor::parse(base_colors[base_color_index]).unwrap();
+        let other_color = HexColor::parse(base_colors[other_color_index]).unwrap();
+
+        let interpolated_color = interpolate_hex_colors(&base_color, &other_color, saturation_offset / num_interpolation_steps as f32);
+        let tile_background = interpolated_color.to_string();
+
+        (tile_background.to_string(), "darkblue".to_string())
     }
 }
 
 // Helper functions
+
+/// Computes log base 2 for a u32.
+fn log_2(mut num: u32) -> u32 {
+    let mut log = 0;
+
+    while num > 1 {
+        num /= 2;
+        log += 1;
+    }
+
+    log
+}
+
+fn interpolate_hex_colors(color1: &HexColor, color2: &HexColor, t: f32) -> HexColor {
+    let r = interpolate_component(color1.r, color2.r, t);
+    let g = interpolate_component(color1.g, color2.g, t);
+    let b = interpolate_component(color1.b, color2.b, t);
+
+    let hex_formatted = format!("#{}{}{}", r, g, b);
+    HexColor::parse_rgb(&hex_formatted).expect(&hex_formatted)
+}
+
+fn interpolate_component(c1: u8, c2: u8, t: f32) -> String {
+    let result = ((1.0 - t) * c1 as f32 + t * c2 as f32).round() as i32;
+    let clamped_result = result.max(0).min(255) as u8;
+    format!("{:02X}", clamped_result)
+}
 
 trait CheckedAdd {
     fn checked_add_max(self, rhs: usize, max: usize) -> Option<usize>;
@@ -600,6 +650,40 @@ mod tests {
                 assert_eq!(starting_tiles[0].value, game.new_tile_params.tile_choices[NewTileParams::TWO]);
             }
         }
+    }
+
+    #[test]
+    /// Tests whether tiles are generating the correct colors.
+    fn test_color_generator() {
+        let game = Game::new();
+
+        let base: u32 = 2;
+        let mut power = 1;
+        let max_power = 30;
+
+        while power < max_power {
+            let tile_value = base.pow(power);
+            let tile_color = game.get_tile_colors(tile_value);
+            print_color_to_stdout(tile_color.0, tile_value);
+            power += 1;
+        }
+
+    }
+
+    fn print_color_to_stdout(hex_color: String, tile_value: u32) {
+        let color = &hex_color[1..];
+
+        // Convert the hexadecimal color to RGB values
+        let red = u8::from_str_radix(&color[0..2], 16).unwrap_or(0);
+        let green = u8::from_str_radix(&color[2..4], 16).unwrap_or(0);
+        let blue = u8::from_str_radix(&color[4..6], 16).unwrap_or(0);
+
+        // Generate the ANSI escape code for the RGB color
+        let formatted_color = format!("\x1b[38;2;{};{};{}m", red, green, blue);
+        // ANSI escape code for resetting text color
+        let reset_code = "\x1b[0m";
+
+        println!("Tile color is {}{}{}", formatted_color, tile_value, reset_code);
     }
 }
 
