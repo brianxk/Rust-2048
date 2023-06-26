@@ -119,7 +119,7 @@ pub struct Game {
     pub board: [[Option<Tile>; BOARD_DIMENSION]; BOARD_DIMENSION],
     new_tile_params: NewTileParams,
     free_slots: Vec<(usize, usize)>,
-    pub score: u64,
+    pub score: u32,
     id_list: LinkedList<usize>,
 }
 
@@ -303,13 +303,10 @@ impl Game {
 
                             // Double merges should not be allowed e.g. [2, 2, 2, 2] -> [0, 0, 4, 4] is a correct merge.
                             if row.checked_sub(i).is_some_and(|diff| self.board[diff][col].as_ref().unwrap().value == tile.value && self.board[diff][col].as_ref().unwrap().merged.is_empty()) {
-                                let merged_tile = self.board[row - i][col].take().unwrap();
-                                tile.merged = merged_tile.id.to_string();
-                                recycled_ids.push(merged_tile.id);
+                                let removed_tile = self.board[row - i][col].take().unwrap();
 
-                                tile.value = tile.value * 2;
-                                tile.background_color = self.get_tile_colors(tile.value).0;
-                                self.update_tile_and_board(tile, merged_tile.row, merged_tile.col);
+                                self.merge_tiles(&mut tile, &removed_tile, &mut recycled_ids);
+                                self.update_tile_and_board(tile, removed_tile.row, removed_tile.col);
                                 move_occurred = true;
                             } else {
                                 self.update_tile_and_board(tile, row - (i - 1), col);
@@ -334,13 +331,10 @@ impl Game {
 
                             // See comments for the "ArrowUp" case for an explanation of this merging logic
                             if row.checked_add_max(i, BOARD_DIMENSION).is_some_and(|sum| self.board[sum][col].as_ref().unwrap().value == tile.value && self.board[sum][col].as_ref().unwrap().merged.is_empty()) {
-                                let merged_tile = self.board[row + i][col].take().unwrap();
-                                tile.merged = merged_tile.id.to_string();
-                                recycled_ids.push(merged_tile.id);
-                                
-                                tile.value = tile.value * 2;
-                                tile.background_color = self.get_tile_colors(tile.value).0;
-                                self.update_tile_and_board(tile, merged_tile.row, merged_tile.col);
+                                let removed_tile = self.board[row + i][col].take().unwrap();
+
+                                self.merge_tiles(&mut tile, &removed_tile, &mut recycled_ids);
+                                self.update_tile_and_board(tile, removed_tile.row, removed_tile.col);
                                 move_occurred = true;
                             } else {
                                 self.update_tile_and_board(tile, row + (i - 1), col);
@@ -365,13 +359,11 @@ impl Game {
 
                             // See comments for the "ArrowUp" case for an explanation of this merging logic
                             if col.checked_sub(i).is_some_and(|diff| self.board[row][diff].as_ref().unwrap().value == tile.value && self.board[row][diff].as_ref().unwrap().merged.is_empty()) {
-                                let merged_tile = self.board[row][col - i].take().unwrap();
-                                tile.merged = merged_tile.id.to_string();
-                                recycled_ids.push(merged_tile.id);
+                                let removed_tile = self.board[row][col - i].take().unwrap();
+                                
+                                self.merge_tiles(&mut tile, &removed_tile, &mut recycled_ids);
+                                self.update_tile_and_board(tile, removed_tile.row, removed_tile.col);
 
-                                tile.value = tile.value * 2;
-                                tile.background_color = self.get_tile_colors(tile.value).0;
-                                self.update_tile_and_board(tile, merged_tile.row, merged_tile.col);
                                 move_occurred = true;
                                 // TODO: update background color to reflect the new value
                             } else {
@@ -397,13 +389,11 @@ impl Game {
 
                             // See comments for the "ArrowUp" case for an explanation of this merging logic
                             if col.checked_add_max(i, BOARD_DIMENSION).is_some_and(|sum| self.board[row][sum].as_ref().unwrap().value == tile.value && self.board[row][sum].as_ref().unwrap().merged.is_empty()) {
-                                let merged_tile = self.board[row][col + i].take().unwrap();
-                                tile.merged = merged_tile.id.to_string();
-                                recycled_ids.push(merged_tile.id);
-                                
-                                tile.value = tile.value * 2;
-                                tile.background_color = self.get_tile_colors(tile.value).0;
-                                self.update_tile_and_board(tile, merged_tile.row, merged_tile.col);
+                                let removed_tile = self.board[row][col + i].take().unwrap();
+
+                                self.merge_tiles(&mut tile, &removed_tile, &mut recycled_ids);
+                                self.update_tile_and_board(tile, removed_tile.row, removed_tile.col);
+
                                 move_occurred = true;
                             } else {
                                 self.update_tile_and_board(tile, row, col + (i - 1));
@@ -442,6 +432,21 @@ impl Game {
         }
     }
 
+    /// Accepts two Tile references and performs necessary steps in merging them. This involves
+    /// storing the removed Tile's ID in the resultant Tile's `merged` field and updating the Vec
+    /// of recycled IDs with this ID. The resultant Tile's value is doubled to reflect the merge
+    /// and the score is incremented by this new value. Finally the resultant Tile's color is also
+    /// updated to reflect its new value.
+    fn merge_tiles(&mut self, merged_tile: &mut Tile, removed_tile: &Tile, recycled_ids: &mut Vec<usize>) {
+        merged_tile.merged = removed_tile.id.to_string();
+        recycled_ids.push(removed_tile.id);
+
+        merged_tile.value *= 2;
+        self.score += merged_tile.value;
+
+        merged_tile.background_color = self.get_tile_colors(merged_tile.value).0;
+    }
+
     /// Receives a tile, the new row and col indexes, and updates both the tile's internal row and
     /// col fields and places the tile in self.board's new location.
     fn update_tile_and_board(&mut self, mut tile: Tile, new_row: usize, new_col: usize) {
@@ -452,20 +457,24 @@ impl Game {
     }
 
     /// Returns tuple of (background_color, text_color) based on tile_value input.
+    /// Background color is based on a color interpolation algorithm:
+    /// 1) 4 base colors are initialized in an array.
+    /// 2) Every 4th power of 2 uses the next base color from the array.
+    /// 3) All powers of 2 between multiples of 4 are interpolated between the two base colors.
     fn get_tile_colors(&self, tile_value: u32) -> (String, String) {
         let base_colors: [&str; 4] = [
                                       "#FFD700", // Yellow
-                                      "#F50A40", // Orange
+                                      "#F50A40", // Magenta
                                       "#3949AB", // Blue
                                       "#6A0DAD", // Purple
                                       ];
 
-        let num_interpolation_steps = 4;
+        let num_interpolation_steps = 3;
 
         // Minus 1 is because tiles start at 2^1 rather than 2^0.
         let log_2 = (log_2(tile_value) - 1) as usize;
-        let base_color_index = (log_2 / base_colors.len()) % 4;
-        let saturation_offset = (log_2 % base_colors.len()) as f32;
+        let base_color_index = (log_2 / num_interpolation_steps) % base_colors.len();
+        let interpolation_offset = (log_2 % num_interpolation_steps) as f32;
 
         let other_color_index;
 
@@ -478,7 +487,7 @@ impl Game {
         let base_color = HexColor::parse(base_colors[base_color_index]).unwrap();
         let other_color = HexColor::parse(base_colors[other_color_index]).unwrap();
 
-        let interpolated_color = interpolate_hex_colors(&base_color, &other_color, saturation_offset / num_interpolation_steps as f32);
+        let interpolated_color = interpolate_hex_colors(&base_color, &other_color, interpolation_offset / num_interpolation_steps as f32);
         let tile_background = interpolated_color.to_string();
 
         (tile_background.to_string(), "darkblue".to_string())
@@ -667,7 +676,6 @@ mod tests {
             print_color_to_stdout(tile_color.0, tile_value);
             power += 1;
         }
-
     }
 
     fn print_color_to_stdout(hex_color: String, tile_value: u32) {

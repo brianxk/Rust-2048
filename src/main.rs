@@ -1,4 +1,5 @@
 use yew::prelude::*;
+use yew::{NodeRef};
 use rust_2048::*;
 use gloo_console::log;
 use gloo::events::EventListener;
@@ -73,7 +74,9 @@ fn content() -> Html {
     let game_state_for_sliding_listener = Rc::clone(&game_state);
     let keypressed_for_keydown = Rc::new(RefCell::new(false));
     let keypressed_for_keyup = keypressed_for_keydown.clone();
-    
+    let score_ref = use_node_ref();
+    let score_merge_clone = score_ref.clone();
+
     use_effect(move || {
         // Attach a keydown event listener to the document.
         let document = gloo::utils::document();
@@ -193,7 +196,7 @@ fn content() -> Html {
 
 
     use_effect(move || {
-        // Attach a keydown event listener to the document.
+        // Attach a keyup event listener to the document.
         let document = gloo::utils::document();
         
         let listener = EventListener::new(&document, "keyup", move |_event| {
@@ -206,51 +209,65 @@ fn content() -> Html {
     });
 
     // Add event listener for sliding animation end to then begin the expanding animation for merged tiles.
-    let body = gloo::utils::body();
-    let merge_expand = Closure::wrap(Box::new(move |event: AnimationEvent| {
-        if event.animation_name() == "sliding" {
-            let event_target = event.target().expect("No event target found.");
-            let tile = event_target.dyn_ref::<HtmlElement>().unwrap();
+    use_effect(move || {
+        let body = gloo::utils::body();
+        let merge_expand = Closure::wrap(Box::new(move |event: AnimationEvent| {
+            if event.animation_name() == "sliding" {
+                let event_target = event.target().expect("No event target found.");
+                let tile = event_target.dyn_ref::<HtmlElement>().unwrap();
 
-            match tile.style().get_property_value("--merged_value") {
-                Ok(merged) => {
-                    if !merged.is_empty() {
-                        
-                        let new_background_color = tile.style().get_property_value("--bg_color").unwrap();
-                        let new_text_color = tile.style().get_property_value("--txt_color").unwrap();
-                        tile.set_inner_html(&merged);
-                        tile.style().set_property("--background_color", &new_background_color).unwrap();
-                        tile.style().set_property("--text_color", &new_text_color).unwrap();
-                        tile.style().set_property("animation", "expand-merge 0.10s ease-in-out").unwrap();
+                match tile.style().get_property_value("--merged_value") {
+                    Ok(merged) => {
+                        if !merged.is_empty() {
+                            
+                            let new_background_color = tile.style().get_property_value("--bg_color").unwrap();
+                            let new_text_color = tile.style().get_property_value("--txt_color").unwrap();
+                            tile.set_inner_html(&merged);
+                            tile.style().set_property("--background_color", &new_background_color).unwrap();
+                            tile.style().set_property("--text_color", &new_text_color).unwrap();
+                            tile.style().set_property("animation", "expand-merge 0.10s ease-in-out").unwrap();
+                            
+                            let parent_node = tile.parent_node().unwrap();
+                            parent_node.remove_child(&tile).unwrap();
+                            parent_node.append_child(&tile).unwrap();
+                            
+                            // Remove merged Tile from the board.
+                            let document = gloo::utils::document();
+                            let merged_tile_id = tile.style().get_property_value("--merged_id").unwrap();
+                            let merged_tile_id = convert_id_unicode(&merged_tile_id);
+                            let merged_tile = document.query_selector(&merged_tile_id).unwrap().expect(&( "Failed to find ID".to_owned() + &merged_tile_id ));
+                            let merged_tile = merged_tile.dyn_ref::<HtmlElement>().unwrap();
+                            parent_node.remove_child(&merged_tile).unwrap();
 
-                        let parent_node = tile.parent_node().unwrap();
-                        parent_node.remove_child(&tile).unwrap();
-                        parent_node.append_child(&tile).unwrap();
-                        
-                        // Remove merged Tile from the board.
-                        let document = gloo::utils::document();
-                        let merged_tile_id = tile.style().get_property_value("--merged_id").unwrap();
-                        let merged_tile_id = convert_id_unicode(&merged_tile_id);
-                        let merged_tile = document.query_selector(&merged_tile_id).unwrap().expect(&( "Failed to find ID".to_owned() + &merged_tile_id ));
-                        let merged_tile = merged_tile.dyn_ref::<HtmlElement>().unwrap();
-                        parent_node.remove_child(&merged_tile).unwrap();
+                            tile.style().set_property("--merged_value", "").unwrap();
 
-                        tile.style().set_property("--merged_value", "").unwrap();
-                    }
-                },
-                Err(_) => (),
+                            // Update score
+                            let score = game_state_for_sliding_listener.borrow().score;
+
+                            log!("Score:", score);
+                            if let Some(score_ref) = score_merge_clone.cast::<HtmlElement>() {
+                                score_ref.set_inner_html(&score.to_string());
+                            }
+                            // score_element.set_inner_html(&score.to_string());
+                        }
+                    },
+                    Err(_) => (),
+                }
             }
-        }
-    }) as Box<dyn FnMut(AnimationEvent)>);
+        }) as Box<dyn FnMut(AnimationEvent)>);
 
-    body.add_event_listener_with_callback("animationend", merge_expand.as_ref().unchecked_ref()).unwrap();
-    merge_expand.forget();
+        body.add_event_listener_with_callback("animationend", merge_expand.as_ref().unchecked_ref()).unwrap();
+
+        || drop(merge_expand)
+    });
+
+    // merge_expand.forget();
 
     // use_state() hook is used to trigger a re-render whenever the `New Game` button is clicked.
     // The value is used as a key to each Tile component in order to its `expand-init` animation.
     let new_game = use_state(|| 0);
     let onclick = {
-        // Elements added via `append_child` do not get removed when this component is re-rendered.
+        // Elements manipulated manually using web_sys do not get removed when this component is re-rendered.
         // Must remove them manually here.
         let document = gloo::utils::document();
         match document.query_selector_all("[class='tile cell']") {
@@ -260,9 +277,12 @@ fn content() -> Html {
                     let element = element.dyn_ref::<HtmlElement>().unwrap();
                     element.remove();
                 }
-            }
-
+            },
             Err(_) => log!("Tiles could not be found."),
+        }
+
+        if let Some(score_ref) = score_ref.cast::<HtmlElement>() {
+            score_ref.set_inner_html("0");
         }
 
         let new_game = new_game.clone();
@@ -271,7 +291,7 @@ fn content() -> Html {
 
     html! {
         <div class="content">
-            <Metadata score={game_state.borrow().score} {onclick}/>
+            <Metadata score={0} node_ref={score_ref} {onclick}/>
             <div class="board-container">
                 <GameBoard/>
                 { 
@@ -305,7 +325,8 @@ fn content() -> Html {
 #[derive(Properties, PartialEq)]
 struct MetadataProps {
     onclick: Callback<MouseEvent>,
-    score: u64,
+    score: u32,
+    node_ref: NodeRef,
 }
 
 #[function_component(Metadata)]
@@ -324,7 +345,7 @@ fn metadata(props: &MetadataProps) -> Html {
 
     html! {
         <div class="metadata" style={style_args}>
-            <Score score={props.score}/>
+            <Score node_ref={props.node_ref.clone()} score={props.score}/>
             <button class="new-game" {onclick}>{ "New Game" }</button>
         </div>
     }
@@ -332,13 +353,14 @@ fn metadata(props: &MetadataProps) -> Html {
 
 #[derive(Properties, PartialEq)]
 struct ScoreProps {
-    score: u64,
+    score: u32,
+    node_ref: NodeRef,
 }
 
 #[function_component(Score)]
 fn score(props: &ScoreProps) -> Html {
     html! {
-        <div class="score">{props.score}</div>
+        <div ref={props.node_ref.clone()} class="score">{props.score}</div>
     }
 }
 
