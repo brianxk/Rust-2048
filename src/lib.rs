@@ -19,7 +19,8 @@ pub struct Tile {
     pub text_color: String,
     pub row: usize,
     pub col: usize,
-    pub merged: Option<(usize, usize)>,
+    // Some(id, row, col)
+    pub merged: Option<(usize, usize, usize)>,
 }
 
 impl Tile {
@@ -435,7 +436,7 @@ impl Game {
     /// and the score is incremented by this new value. Finally the resultant Tile's color is also
     /// updated to reflect its new value.
     fn merge_tiles(&mut self, merged_tile: &mut Tile, removed_tile: &Tile, recycled_ids: &mut Vec<usize>) {
-        merged_tile.merged = Some((removed_tile.row, removed_tile.col));
+        merged_tile.merged = Some((removed_tile.id, removed_tile.row, removed_tile.col));
         recycled_ids.push(removed_tile.id);
 
         merged_tile.value *= 2;

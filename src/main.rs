@@ -131,19 +131,51 @@ fn content() -> Html {
                                         tile.style().set_property("--new_left", &new_left_offset).unwrap();
                                         tile.style().set_property("--new_top", &new_top_offset).unwrap();
 
-                                        if !updated_tile.merged.is_empty() {
-                                            // Will be used by callback that handles merge_expand animations
+                                        // If a tile is merged, its corresponding tile was removed
+                                        // from the backend. However, the backend provides that
+                                        // Tile's ID, row, and col so the frontend knows how to
+                                        // slide the tile before merging and deleting it.
+                                        if let Some((removed_id, removed_row, removed_col)) = updated_tile.merged {
+                                            // Save the Tile's ID for later removal.
                                             tile.style().set_property("--merged_value", &updated_tile.value.to_string()).unwrap();
-                                            tile.style().set_property("--merged_id", &updated_tile.merged).unwrap();
+                                            tile.style().set_property("--merged_id", &removed_id.to_string()).unwrap();
                                             tile.style().set_property("--bg_color", &updated_tile.background_color).unwrap();
                                             tile.style().set_property("--txt_color", &updated_tile.text_color).unwrap();
+
+                                            // Slide the tile to its destination.
+                                            let removed_tile = document.query_selector(&convert_id_unicode(&removed_id.to_string())).unwrap().unwrap();
+                                            let removed_tile = removed_tile.dyn_ref::<HtmlElement>().unwrap();
+
+                                            let computed_style = window().unwrap().get_computed_style(&removed_tile).unwrap().unwrap();
+                                            let current_top_offset = computed_style.get_property_value("top").unwrap();
+                                            let current_left_offset = computed_style.get_property_value("left").unwrap();
+
+                                            let (new_top_offset, new_left_offset) = convert_to_pixels(removed_row, removed_col);
+
+                                            let new_top_offset = format!("{}px", new_top_offset);
+                                            let new_left_offset = format!("{}px", new_left_offset);
+
+                                            removed_tile.style().set_property("--current_left", &current_left_offset).unwrap();
+                                            removed_tile.style().set_property("--current_top", &current_top_offset).unwrap();
+
+                                            removed_tile.style().set_property("--new_left", &new_left_offset).unwrap();
+                                            removed_tile.style().set_property("--new_top", &new_top_offset).unwrap();
+
+                                            let parent_node = removed_tile.parent_node().unwrap();
+                                            parent_node.remove_child(&removed_tile).unwrap();
+                                            parent_node.append_child(&removed_tile).unwrap();
+
+                                            removed_tile.style().set_property("animation", "sliding 0.10s ease-in-out forwards").unwrap();
+
+                                            removed_tile.style().set_property("top", &new_top_offset).unwrap();
+                                            removed_tile.style().set_property("left", &new_left_offset).unwrap();
                                         }
 
                                         let parent_node = tile.parent_node().unwrap();
                                         parent_node.remove_child(&tile).unwrap();
                                         parent_node.append_child(&tile).unwrap();
 
-                                        tile.style().set_property("animation", "sliding 0.90s ease-in-out forwards").unwrap();
+                                        tile.style().set_property("animation", "sliding 0.10s ease-in-out forwards").unwrap();
 
                                         tile.style().set_property("top", &new_top_offset).unwrap();
                                         tile.style().set_property("left", &new_left_offset).unwrap();
