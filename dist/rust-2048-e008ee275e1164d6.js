@@ -603,6 +603,9 @@ function __wbg_get_imports() {
     imports.wbg.__wbg_addEventListener_a5963e26cd7b176b = function() { return handleError(function (arg0, arg1, arg2, arg3, arg4) {
         getObject(arg0).addEventListener(getStringFromWasm0(arg1, arg2), getObject(arg3), getObject(arg4));
     }, arguments) };
+    imports.wbg.__wbg_removeEventListener_5de660c02ed784e4 = function() { return handleError(function (arg0, arg1, arg2, arg3) {
+        getObject(arg0).removeEventListener(getStringFromWasm0(arg1, arg2), getObject(arg3));
+    }, arguments) };
     imports.wbg.__wbg_removeEventListener_782040b4432709cb = function() { return handleError(function (arg0, arg1, arg2, arg3, arg4) {
         getObject(arg0).removeEventListener(getStringFromWasm0(arg1, arg2), getObject(arg3), arg4 !== 0);
     }, arguments) };
@@ -762,15 +765,15 @@ function __wbg_get_imports() {
         const ret = wasm.memory;
         return addHeapObject(ret);
     };
-    imports.wbg.__wbindgen_closure_wrapper1480 = function(arg0, arg1, arg2) {
+    imports.wbg.__wbindgen_closure_wrapper1481 = function(arg0, arg1, arg2) {
         const ret = makeMutClosure(arg0, arg1, 106, __wbg_adapter_24);
         return addHeapObject(ret);
     };
-    imports.wbg.__wbindgen_closure_wrapper5364 = function(arg0, arg1, arg2) {
+    imports.wbg.__wbindgen_closure_wrapper5365 = function(arg0, arg1, arg2) {
         const ret = makeMutClosure(arg0, arg1, 515, __wbg_adapter_27);
         return addHeapObject(ret);
     };
-    imports.wbg.__wbindgen_closure_wrapper5488 = function(arg0, arg1, arg2) {
+    imports.wbg.__wbindgen_closure_wrapper5489 = function(arg0, arg1, arg2) {
         const ret = makeMutClosure(arg0, arg1, 527, __wbg_adapter_30);
         return addHeapObject(ret);
     };
@@ -814,7 +817,7 @@ async function __wbg_init(input) {
     if (wasm !== undefined) return wasm;
 
     if (typeof input === 'undefined') {
-        input = new URL('rust-2048-6b54f7ca34e687aa_bg.wasm', import.meta.url);
+        input = new URL('rust-2048-e008ee275e1164d6_bg.wasm', import.meta.url);
     }
     const imports = __wbg_get_imports();
 

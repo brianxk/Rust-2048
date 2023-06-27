@@ -256,7 +256,12 @@ fn content() -> Html {
 
         body.add_event_listener_with_callback("animationend", merge_expand.as_ref().unchecked_ref()).unwrap();
 
-        || drop(merge_expand)
+        || {
+            // Must remove the callback or else memory leak will occur each time New Game is clicked.
+            let body = gloo::utils::body();
+            body.remove_event_listener_with_callback("animationend", merge_expand.as_ref().unchecked_ref()).unwrap();
+            drop(merge_expand)
+        }
     });
 
     // use_state() hook is used to trigger a re-render whenever the `New Game` button is clicked.
@@ -277,16 +282,18 @@ fn content() -> Html {
             Err(_) => log!("Tiles could not be found."),
         }
 
-        if let Some(score_ref) = score_ref.cast::<HtmlElement>() {
-            score_ref.set_inner_html("0");
-        }
+        // if let Some(score_ref) = score_ref.cast::<HtmlElement>() {
+        //     score_ref.set_inner_html("0");
+        // }
 
         let new_game = new_game.clone();
         Callback::from(move |_| new_game.set(*new_game + 1))
     };
 
+    let new_game_render = *new_game.clone();
+
     html! {
-        <div class="content">
+        <div class="content" key={new_game_render}>
             <Metadata score={0} node_ref={score_ref} {onclick}/>
             <div class="board-container">
                 <GameBoard/>
@@ -298,11 +305,9 @@ fn content() -> Html {
                         let id = tile.id;
                         let (top_offset, left_offset) = 
                             convert_to_pixels(tile.row, tile.col);
-                        let animation_key = *new_game.clone();
 
                         html! {
                             <Tile 
-                                key={animation_key}
                                 value={value}
                                 background_color={background_color}
                                 text_color={text_color}
