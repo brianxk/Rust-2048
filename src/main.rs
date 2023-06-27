@@ -314,10 +314,6 @@ fn content() -> Html {
             Err(_) => log!("Tiles could not be found."),
         }
 
-        // if let Some(score_ref) = score_ref.cast::<HtmlElement>() {
-        //     score_ref.set_inner_html("0");
-        // }
-
         let new_game = new_game.clone();
         Callback::from(move |_| new_game.set(*new_game + 1))
     };
