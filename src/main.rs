@@ -244,11 +244,9 @@ fn content() -> Html {
                             // Update score
                             let score = game_state_for_sliding_listener.borrow().score;
 
-                            log!("Score:", score);
                             if let Some(score_ref) = score_merge_clone.cast::<HtmlElement>() {
                                 score_ref.set_inner_html(&score.to_string());
                             }
-                            // score_element.set_inner_html(&score.to_string());
                         }
                     },
                     Err(_) => (),
@@ -260,8 +258,6 @@ fn content() -> Html {
 
         || drop(merge_expand)
     });
-
-    // merge_expand.forget();
 
     // use_state() hook is used to trigger a re-render whenever the `New Game` button is clicked.
     // The value is used as a key to each Tile component in order to its `expand-init` animation.
