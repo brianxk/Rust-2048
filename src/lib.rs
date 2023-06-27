@@ -6,11 +6,8 @@ pub const BOARD_DIMENSION: usize = 4;
 const NUM_TILES: usize = BOARD_DIMENSION * BOARD_DIMENSION;
 
 // TODO:
-// 1. Implement score.
 // 2. Reduce font size for larger numbers - find a way to tie the font size to the cell width.
 // 3. Include link to source code.
-// 4. Improve color scheme - develop a color changing algorithm.
-// 5. Refactor frontend so that tile deletion occurs after the merge occurs.
 // 6. Merged tiles need a copy of the old tile so the frontend knows how to move those prior to merging.
 // 7. Multithreading.
 
@@ -22,7 +19,7 @@ pub struct Tile {
     pub text_color: String,
     pub row: usize,
     pub col: usize,
-    pub merged: String,
+    pub merged: Option<(usize, usize)>,
 }
 
 impl Tile {
@@ -34,7 +31,7 @@ impl Tile {
             text_color,
             row,
             col,
-            merged: String::new(),
+            merged: None,
         }
     }
 }
@@ -267,7 +264,7 @@ impl Game {
         for row in 0..BOARD_DIMENSION {
             for col in 0..BOARD_DIMENSION {
                 if self.board[row][col].is_some() {
-                    self.board[row][col].as_mut().unwrap().merged = String::new();
+                    self.board[row][col].as_mut().unwrap().merged = None;
                 }
             }
         }
@@ -302,7 +299,7 @@ impl Game {
                             // merging logic.
 
                             // Double merges should not be allowed e.g. [2, 2, 2, 2] -> [0, 0, 4, 4] is a correct merge.
-                            if row.checked_sub(i).is_some_and(|diff| self.board[diff][col].as_ref().unwrap().value == tile.value && self.board[diff][col].as_ref().unwrap().merged.is_empty()) {
+                            if row.checked_sub(i).is_some_and(|diff| self.board[diff][col].as_ref().unwrap().value == tile.value && self.board[diff][col].as_ref().unwrap().merged.is_none()) {
                                 let removed_tile = self.board[row - i][col].take().unwrap();
 
                                 self.merge_tiles(&mut tile, &removed_tile, &mut recycled_ids);
@@ -330,7 +327,7 @@ impl Game {
                             }
 
                             // See comments for the "ArrowUp" case for an explanation of this merging logic
-                            if row.checked_add_max(i, BOARD_DIMENSION).is_some_and(|sum| self.board[sum][col].as_ref().unwrap().value == tile.value && self.board[sum][col].as_ref().unwrap().merged.is_empty()) {
+                            if row.checked_add_max(i, BOARD_DIMENSION).is_some_and(|sum| self.board[sum][col].as_ref().unwrap().value == tile.value && self.board[sum][col].as_ref().unwrap().merged.is_none()) {
                                 let removed_tile = self.board[row + i][col].take().unwrap();
 
                                 self.merge_tiles(&mut tile, &removed_tile, &mut recycled_ids);
@@ -358,7 +355,7 @@ impl Game {
                             }
 
                             // See comments for the "ArrowUp" case for an explanation of this merging logic
-                            if col.checked_sub(i).is_some_and(|diff| self.board[row][diff].as_ref().unwrap().value == tile.value && self.board[row][diff].as_ref().unwrap().merged.is_empty()) {
+                            if col.checked_sub(i).is_some_and(|diff| self.board[row][diff].as_ref().unwrap().value == tile.value && self.board[row][diff].as_ref().unwrap().merged.is_none()) {
                                 let removed_tile = self.board[row][col - i].take().unwrap();
                                 
                                 self.merge_tiles(&mut tile, &removed_tile, &mut recycled_ids);
@@ -388,7 +385,7 @@ impl Game {
                             }
 
                             // See comments for the "ArrowUp" case for an explanation of this merging logic
-                            if col.checked_add_max(i, BOARD_DIMENSION).is_some_and(|sum| self.board[row][sum].as_ref().unwrap().value == tile.value && self.board[row][sum].as_ref().unwrap().merged.is_empty()) {
+                            if col.checked_add_max(i, BOARD_DIMENSION).is_some_and(|sum| self.board[row][sum].as_ref().unwrap().value == tile.value && self.board[row][sum].as_ref().unwrap().merged.is_none()) {
                                 let removed_tile = self.board[row][col + i].take().unwrap();
 
                                 self.merge_tiles(&mut tile, &removed_tile, &mut recycled_ids);
@@ -438,7 +435,7 @@ impl Game {
     /// and the score is incremented by this new value. Finally the resultant Tile's color is also
     /// updated to reflect its new value.
     fn merge_tiles(&mut self, merged_tile: &mut Tile, removed_tile: &Tile, recycled_ids: &mut Vec<usize>) {
-        merged_tile.merged = removed_tile.id.to_string();
+        merged_tile.merged = Some((removed_tile.row, removed_tile.col));
         recycled_ids.push(removed_tile.id);
 
         merged_tile.value *= 2;

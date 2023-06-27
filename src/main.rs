@@ -143,7 +143,7 @@ fn content() -> Html {
                                         parent_node.remove_child(&tile).unwrap();
                                         parent_node.append_child(&tile).unwrap();
 
-                                        tile.style().set_property("animation", "sliding 0.10s ease-in-out forwards").unwrap();
+                                        tile.style().set_property("animation", "sliding 0.90s ease-in-out forwards").unwrap();
 
                                         tile.style().set_property("top", &new_top_offset).unwrap();
                                         tile.style().set_property("left", &new_left_offset).unwrap();
