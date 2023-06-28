@@ -85,11 +85,22 @@ table {
     background-color: var(--cell_background);
 }
 
+.module h2 {
+  font-size: 1em;
+  container-name: sidebar
+}
+
+@container sidebar (min-width: 700px) {
+  .module h2 {
+    font-size: 2em;
+  }
+}
+
 .tile {
     font-family: Verdana, Geneva, sans-serif;
     text-align: center;
     line-height: 120px;
-    font-size: 3.5rem;
+    font-size: 3.0em;
     position: absolute;
     top: var(--top);
     left: var(--left);

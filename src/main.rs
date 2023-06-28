@@ -1,5 +1,5 @@
 use yew::prelude::*;
-use yew::{NodeRef};
+use yew::NodeRef;
 use rust_2048::*;
 use gloo_console::log;
 use gloo::events::EventListener;
@@ -54,11 +54,15 @@ struct TileProps {
 
 #[function_component(Tile)]
 fn tile(props: &TileProps) -> Html {
-    let style_args = format!("--top: {}px; --left: {}px; --background_color: {}; --text_color: {}", 
+    let mut font_size = "3.5em";
+
+
+    let style_args = format!("--top: {}px; --left: {}px; --background_color: {}; --text_color: {}; font-size: {}", 
                            props.top_offset,
                            props.left_offset,
                            props.background_color,
-                           props.text_color);
+                           props.text_color,
+                           font_size);
 
     let tile_id = props.id.to_string();
 
@@ -249,12 +253,18 @@ fn content() -> Html {
                 let tile = event_target.dyn_ref::<HtmlElement>().unwrap();
 
                 match tile.style().get_property_value("--merged_value") {
-                    Ok(merged) => {
-                        if !merged.is_empty() {
+                    Ok(merged_value) => {
+                        if !merged_value.is_empty() {
                             
                             let new_background_color = tile.style().get_property_value("--bg_color").unwrap();
                             let new_text_color = tile.style().get_property_value("--txt_color").unwrap();
-                            tile.set_inner_html(&merged);
+
+                            // Reduce font size for larger numbers to prevent overflow.
+                            let font_size = compute_font_size(&merged_value);
+
+                            tile.style().set_property("font-size", &font_size).unwrap();
+                            log!("font-size:", &font_size);
+                            tile.set_inner_html(&merged_value);
                             tile.style().set_property("--background_color", &new_background_color).unwrap();
                             tile.style().set_property("--text_color", &new_text_color).unwrap();
                             tile.style().set_property("animation", "expand-merge 0.10s ease-in-out").unwrap();
@@ -461,6 +471,22 @@ fn convert_to_indexes(top: &str, left: &str) -> (usize, usize) {
     let left = pixel_to_u16(left);
     
     (pixel_to_index(top), pixel_to_index(left))
+}
+
+/// Determines font-size based on number of digits to prevent overflow.
+fn compute_font_size(value: &String) -> String {
+    let mut font_size = "";
+    let len = value.len();
+
+    if len > 5 {
+        font_size = "1.85em";
+    } else if len > 4 {
+        font_size = "2.25em";
+    } else if len > 3 {
+        font_size = "2.70em";
+    }
+
+    font_size.to_string()
 }
 
 /// Accepts a String pixel value e.g. "252px" and returns it parsed as u16.

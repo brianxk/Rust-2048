@@ -6,6 +6,7 @@ pub const BOARD_DIMENSION: usize = 4;
 const NUM_TILES: usize = BOARD_DIMENSION * BOARD_DIMENSION;
 
 // TODO:
+// 1. Update project description with link to game.
 // 2. Reduce font size for larger numbers - find a way to tie the font size to the cell width.
 // 3. Include link to source code.
 // 6. Merged tiles need a copy of the old tile so the frontend knows how to move those prior to merging.
@@ -161,7 +162,8 @@ impl Game {
         let first_tile_id = game.get_id().unwrap();
         let (background_color, text_color) = game.get_tile_colors(first_tile_value);
 
-        let first_tile = Tile::new(first_tile_value,
+        // let first_tile = Tile::new(first_tile_value,
+        let first_tile = Tile::new(90000,
                                    first_tile_id, 
                                    background_color,
                                    text_color,
@@ -174,7 +176,8 @@ impl Game {
         let second_tile_id = game.get_id().unwrap();
         let (background_color, text_color) = game.get_tile_colors(second_tile_value);
 
-        let second_tile = Tile::new(second_tile_value,
+        // let second_tile = Tile::new(second_tile_value,
+        let second_tile = Tile::new(90000,
                                     second_tile_id,
                                     background_color,
                                     text_color,
