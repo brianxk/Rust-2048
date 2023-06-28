@@ -108,8 +108,8 @@ impl Colors {
 
 pub struct InvalidMove;
 
-pub enum InputResult {
-    Ok(usize),
+pub enum InputResult<'a> {
+    Ok(usize, Vec<&'a Tile>),
     Err(InvalidMove),
 }
 
@@ -413,6 +413,7 @@ impl Game {
                 Some((i, j)) => {
                     // New tile ID should not use the ID of a tile that was merged this turn.
                     let new_id = self.get_id().unwrap();
+                    // let new_id = 10;
                     self.recycle_ids(recycled_ids);
 
                     let new_tile_value = self.generate_tile_value();
@@ -422,7 +423,7 @@ impl Game {
                     self.board[i][j] = Some(new_tile);
                     // Create a systematic way to decide background color. Modulus?
                     // Consider re-doing the colorscheme of the board in this step.
-                    InputResult::Ok(new_id)
+                    InputResult::Ok(new_id, self.get_tiles())
                 },
                 None => unreachable!(),
             }
