@@ -100,13 +100,13 @@ table {
     font-family: Verdana, Geneva, sans-serif;
     text-align: center;
     line-height: 120px;
-    font-size: 3.0em;
     position: absolute;
     top: var(--top);
     left: var(--left);
     background-color: var(--background_color);
     color: var(--text_color);
-    animation: expand-init 0.25s ease-in-out;
+    transition: left 250ms ease-in-out, top 250ms ease-in-out;
+    /* animation: expand-init 0.25s ease-in-out; */
 }
 
 @keyframes expand-init {

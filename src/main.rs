@@ -58,15 +58,12 @@ struct TileProps {
 
 #[function_component(Tile)]
 fn tile(props: &TileProps) -> Html {
-    let mut font_size = "3.5em";
-
-
     let style_args = format!("--top: {}px; --left: {}px; --background_color: {}; --text_color: {}; font-size: {}", 
                            props.top_offset,
                            props.left_offset,
                            props.background_color,
                            props.text_color,
-                           font_size);
+                           compute_font_size(&props.value.to_string()));
 
     let tile_id = props.id.to_string();
 
@@ -75,12 +72,89 @@ fn tile(props: &TileProps) -> Html {
     }
 }
 
+async fn slide_tile(html_tile: &HtmlElement, game_tile: &rust_2048::Tile) {
+    let computed_style = window().unwrap().get_computed_style(html_tile).unwrap().unwrap();
+    let current_top_offset = &computed_style.get_property_value("top").unwrap();
+    let current_left_offset = &computed_style.get_property_value("left").unwrap();
+
+    let (new_top_offset, new_left_offset) = convert_to_pixels(game_tile.row, game_tile.col);
+
+    let new_top_offset = format!("{}px", new_top_offset);
+    let new_left_offset = format!("{}px", new_left_offset);
+
+    html_tile.style().set_property("--current_left", &current_left_offset).unwrap();
+    html_tile.style().set_property("--current_top", &current_top_offset).unwrap();
+
+    html_tile.style().set_property("--new_left", &new_left_offset).unwrap();
+    html_tile.style().set_property("--new_top", &new_top_offset).unwrap();
+
+    let parent_node = html_tile.parent_node().unwrap();
+    parent_node.remove_child(&html_tile).unwrap();
+    parent_node.append_child(&html_tile).unwrap();
+
+    html_tile.style().set_property("animation", "sliding 0.10s ease-in-out forwards").unwrap();
+
+    // sleep(Duration::from_millis(100)).await;
+    
+    // html_tile.style().set_property("top", &new_top_offset).unwrap();
+    // html_tile.style().set_property("left", &new_left_offset).unwrap();
+}
+
 async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx: Receiver<String>) {
     while let Some(key_code) = keydown_rx.recv().await {
-        // sleep(Duration::from_millis(3000)).await;
         match game_state.borrow_mut().receive_input(&key_code) {
-            InputResult::Ok(new_tile_id) => {
+            InputResult::Ok(new_tile_id, tiles) => {
                 log!("Move successful!");
+                let document = gloo::utils::document();
+                
+                match document.query_selector_all("[class='tile cell']") {
+                    Ok(node_list) => {
+                        for i in 0..node_list.length() {
+                            let node = node_list.get(i).unwrap();
+                            let tile = node.dyn_ref::<HtmlElement>().unwrap();
+                            let tile_id = tile.get_attribute("id").unwrap().parse::<usize>().unwrap();
+
+
+                            if let Some(updated_tile) = get_tile_by_id(&tiles, tile_id) {
+                                slide_tile(tile, updated_tile).await;
+
+                                // If a tile is merged, its corresponding tile was removed from the backend. However, the backend provides that
+                                // Tile's ID, row, and col so the frontend knows how to slide the tile into position before merging and deleting it.
+                                // If the `merged` field is the `None` variant, that means that Tile was not merged.
+                                if let Some((removed_id, removed_row, removed_col)) = updated_tile.merged {
+                                    // Save the Tile's ID for later removal.
+                                    tile.style().set_property("--merged_value", &updated_tile.value.to_string()).unwrap();
+                                    tile.style().set_property("--merged_id", &removed_id.to_string()).unwrap();
+                                    tile.style().set_property("--bg_color", &updated_tile.background_color).unwrap();
+                                    tile.style().set_property("--txt_color", &updated_tile.text_color).unwrap();
+
+                                    // removed_tile.style().set_property("--current_left", &current_left_offset).unwrap();
+                                    // removed_tile.style().set_property("--current_top", &current_top_offset).unwrap();
+
+                                    // removed_tile.style().set_property("--new_left", &new_left_offset).unwrap();
+                                    // removed_tile.style().set_property("--new_top", &new_top_offset).unwrap();
+
+                                    // let parent_node = removed_tile.parent_node().unwrap();
+                                    // parent_node.remove_child(&removed_tile).unwrap();
+                                    // parent_node.append_child(&removed_tile).unwrap();
+
+                                    // removed_tile.style().set_property("animation", "sliding 0.10s ease-in-out forwards").unwrap();
+
+                                    // removed_tile.style().set_property("top", &new_top_offset).unwrap();
+                                    // removed_tile.style().set_property("left", &new_left_offset).unwrap();
+                                }
+                            }
+                        }
+
+                        // let board = document.query_selector(".board-container").unwrap().unwrap();
+                        // let board = board.dyn_ref::<HtmlElement>().unwrap();
+                        // let board_parent = board.parent_node().unwrap();
+                        // board_parent.remove_child(&board).unwrap();
+                        // board_parent.append_child(&board).unwrap();
+                        // sleep(Duration::from_millis(100)).await;
+                    },
+                    Err(_) => log!("NodeList could not be found."),
+                }
             },
             InputResult::Err(InvalidMove) => {
                 log!("Invalid move.");
@@ -314,6 +388,8 @@ fn compute_font_size(value: &String) -> String {
         font_size = "2.25em";
     } else if len > 3 {
         font_size = "2.70em";
+    } else {
+        font_size = "3.50em";
     }
 
     font_size.to_string()
