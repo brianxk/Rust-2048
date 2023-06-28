@@ -106,7 +106,7 @@ table {
     background-color: var(--background_color);
     color: var(--text_color);
     transition: left 250ms ease-in-out, top 250ms ease-in-out;
-    /* animation: expand-init 0.25s ease-in-out; */
+    animation: expand-init 0.25s ease-in-out;
 }
 
 @keyframes expand-init {

@@ -796,7 +796,7 @@ async function __wbg_init(input) {
     if (wasm !== undefined) return wasm;
 
     if (typeof input === 'undefined') {
-        input = new URL('rust-2048-cd5a0c0d0fbabdc2_bg.wasm', import.meta.url);
+        input = new URL('rust-2048-3b2955e64a18dcbd_bg.wasm', import.meta.url);
     }
     const imports = __wbg_get_imports();
 
