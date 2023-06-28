@@ -10,6 +10,10 @@ use std::cell::RefCell;
 use substring::Substring;
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::closure::Closure;
+use wasm_bindgen_futures::spawn_local;
+use tokio::sync::mpsc::{self, Receiver};
+use yew::platform::time::sleep;
+use core::time::Duration;
 
 const BORDER_SPACING: u16 = 4;
 const TILE_DIMENSION: u16 = 120;
@@ -71,6 +75,20 @@ fn tile(props: &TileProps) -> Html {
     }
 }
 
+async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx: Receiver<String>) {
+    while let Some(key_code) = keydown_rx.recv().await {
+        // sleep(Duration::from_millis(3000)).await;
+        match game_state.borrow_mut().receive_input(&key_code) {
+            InputResult::Ok(new_tile_id) => {
+                log!("Move successful!");
+            },
+            InputResult::Err(InvalidMove) => {
+                log!("Invalid move.");
+            },
+        }
+    }
+}
+
 #[function_component(Content)]
 fn content() -> Html {
     let game_state = Rc::new(RefCell::new(Game::new()));
@@ -80,220 +98,32 @@ fn content() -> Html {
     let keypressed_for_keyup = keypressed_for_keydown.clone();
     let score_ref = use_node_ref();
     let score_merge_clone = score_ref.clone();
+    
+    // Prevents use of arrow keys for scrolling the page
+    preventDefaultScrolling();
 
+    let (keydown_tx, keydown_rx) = mpsc::channel(100);
+    
+    // Attach a keydown event listener to the document.
     use_effect(move || {
-        // Attach a keydown event listener to the document.
+        spawn_local(process_keydown_messages(game_state_for_move_listener, keydown_rx));
+
         let document = gloo::utils::document();
-        
         let listener = EventListener::new(&document, "keydown", move |event| {
-
-            {
-                let mut key_event_fired = keypressed_for_keydown.borrow_mut();
-
-                if !*key_event_fired {
-                    *key_event_fired = true;
-                } else {
-                    return
-                }
-            }
-
-            let event = event.dyn_ref::<web_sys::KeyboardEvent>().unwrap_throw();
-
-            // Prevents use of arrow keys for scrolling the page
-            preventDefaultScrolling();
-
-            let mut game_state_borrow_mut = game_state_for_move_listener.borrow_mut();
-
-            match game_state_borrow_mut.receive_input(&event.code()) {
-                InputResult::Ok(new_tile_id) => {
-                    log!("Move successful");
-                    let tiles = game_state_borrow_mut.get_tiles();
-
-                    let document = gloo::utils::document();
-
-                    match document.query_selector_all("[class='tile cell']") {
-                        Ok(node_list) => {
-                            for i in 0..node_list.length() {
-                                let node = node_list.get(i).unwrap();
-                                let tile = node.dyn_ref::<HtmlElement>().unwrap();
-                                let tile_id = tile.get_attribute("id").unwrap().parse::<usize>().unwrap();
-                                let computed_style = window().unwrap().get_computed_style(&tile).unwrap().unwrap();
-
-                                let current_top_offset = &computed_style.get_property_value("top").unwrap();
-                                let current_left_offset = &computed_style.get_property_value("left").unwrap();
-
-                                match get_tile_by_id(&tiles, tile_id) {
-                                    Some(updated_tile) => {
-                                        let (new_top_offset, new_left_offset) = convert_to_pixels(updated_tile.row, updated_tile.col);
-
-                                        let new_top_offset = format!("{}px", new_top_offset);
-                                        let new_left_offset = format!("{}px", new_left_offset);
-
-                                        tile.style().set_property("--current_left", &current_left_offset).unwrap();
-                                        tile.style().set_property("--current_top", &current_top_offset).unwrap();
-
-                                        tile.style().set_property("--new_left", &new_left_offset).unwrap();
-                                        tile.style().set_property("--new_top", &new_top_offset).unwrap();
-
-                                        // If a tile is merged, its corresponding tile was removed
-                                        // from the backend. However, the backend provides that
-                                        // Tile's ID, row, and col so the frontend knows how to
-                                        // slide the tile before merging and deleting it.
-                                        if let Some((removed_id, removed_row, removed_col)) = updated_tile.merged {
-                                            // Save the Tile's ID for later removal.
-                                            tile.style().set_property("--merged_value", &updated_tile.value.to_string()).unwrap();
-                                            tile.style().set_property("--merged_id", &removed_id.to_string()).unwrap();
-                                            tile.style().set_property("--bg_color", &updated_tile.background_color).unwrap();
-                                            tile.style().set_property("--txt_color", &updated_tile.text_color).unwrap();
-
-                                            // Slide the tile to its destination.
-                                            let removed_tile = document.query_selector(&convert_id_unicode(&removed_id.to_string())).unwrap().unwrap();
-                                            let removed_tile = removed_tile.dyn_ref::<HtmlElement>().unwrap();
-
-                                            let computed_style = window().unwrap().get_computed_style(&removed_tile).unwrap().unwrap();
-                                            let current_top_offset = computed_style.get_property_value("top").unwrap();
-                                            let current_left_offset = computed_style.get_property_value("left").unwrap();
-
-                                            let (new_top_offset, new_left_offset) = convert_to_pixels(removed_row, removed_col);
-
-                                            let new_top_offset = format!("{}px", new_top_offset);
-                                            let new_left_offset = format!("{}px", new_left_offset);
-
-                                            removed_tile.style().set_property("--current_left", &current_left_offset).unwrap();
-                                            removed_tile.style().set_property("--current_top", &current_top_offset).unwrap();
-
-                                            removed_tile.style().set_property("--new_left", &new_left_offset).unwrap();
-                                            removed_tile.style().set_property("--new_top", &new_top_offset).unwrap();
-
-                                            let parent_node = removed_tile.parent_node().unwrap();
-                                            parent_node.remove_child(&removed_tile).unwrap();
-                                            parent_node.append_child(&removed_tile).unwrap();
-
-                                            removed_tile.style().set_property("animation", "sliding 0.10s ease-in-out forwards").unwrap();
-
-                                            removed_tile.style().set_property("top", &new_top_offset).unwrap();
-                                            removed_tile.style().set_property("left", &new_left_offset).unwrap();
-                                        }
-
-                                        let parent_node = tile.parent_node().unwrap();
-                                        parent_node.remove_child(&tile).unwrap();
-                                        parent_node.append_child(&tile).unwrap();
-
-                                        tile.style().set_property("animation", "sliding 0.10s ease-in-out forwards").unwrap();
-
-                                        tile.style().set_property("top", &new_top_offset).unwrap();
-                                        tile.style().set_property("left", &new_left_offset).unwrap();
-
-                                    },
-                                    None => {
-                                        // Tile with specified id was merged and should be removed.
-                                        // let parent_node = tile.parent_node().unwrap();
-                                        // parent_node.remove_child(&tile).unwrap();
-                                    }
-                                }
-                            }
-                        }
-                        Err(_) => log!("NodeList could not be found."),
-                    }
-
-                    // Render the new tile
-                    let new_tile = get_tile_by_id(&tiles, new_tile_id).expect("New tile ID not found.");
-                    let (top_offset, left_offset) = convert_to_pixels(new_tile.row, new_tile.col);
-                    
-                    let style_args = format!("--top: {}px; --left: {}px; --background_color: {}", 
-                       top_offset,
-                       left_offset,
-                       &new_tile.background_color,
-                    );
-
-                    let new_tile_node = document.create_element("div").expect("Failed to create new tile node.");
-                    let new_tile_node = new_tile_node.dyn_ref::<HtmlElement>().unwrap();
-
-                    new_tile_node.set_inner_html(&new_tile.value.to_string());
-                    new_tile_node.set_class_name("tile cell");
-                    new_tile_node.set_attribute("style", &style_args).unwrap();
-                    new_tile_node.set_id(&new_tile_id.to_string());
-                    new_tile_node.style().set_property("--background_color", &new_tile.background_color).unwrap();
-                    new_tile_node.style().set_property("--text_color", &new_tile.text_color).unwrap();
-
-                    let board_container = document.query_selector(".board-container").unwrap().unwrap();
-                    board_container.append_child(&new_tile_node).unwrap();
-                },
-                InputResult::Err(InvalidMove) => {
-                    log!("Move unsuccessful");
-                },
-            }
+            
+            let key_code = event.dyn_ref::<web_sys::KeyboardEvent>().unwrap_throw().code();
+            keydown_tx.blocking_send(key_code).expect("Sending key_code failed.");
         });
 
         // Called when the component is unmounted.  The closure has to hold on to `listener`, because if it gets
         // dropped, `gloo` detaches it from the DOM. So it's important to do _something_, even if it's just dropping it.
         || drop(listener)
     });
-
-
-    use_effect(move || {
-        // Attach a keyup event listener to the document.
-        let document = gloo::utils::document();
-        
-        let listener = EventListener::new(&document, "keyup", move |_event| {
-            let mut key_event_fired = keypressed_for_keyup.borrow_mut();
-
-            *key_event_fired = false;
-        });
-
-        || drop(listener)
-    });
-
+    
     // Add event listener for sliding animation end to then begin the expanding animation for merged tiles.
     use_effect(move || {
         let body = gloo::utils::body();
         let merge_expand = Closure::wrap(Box::new(move |event: AnimationEvent| {
-            if event.animation_name() == "sliding" {
-                let event_target = event.target().expect("No event target found.");
-                let tile = event_target.dyn_ref::<HtmlElement>().unwrap();
-
-                match tile.style().get_property_value("--merged_value") {
-                    Ok(merged_value) => {
-                        if !merged_value.is_empty() {
-                            
-                            let new_background_color = tile.style().get_property_value("--bg_color").unwrap();
-                            let new_text_color = tile.style().get_property_value("--txt_color").unwrap();
-
-                            // Reduce font size for larger numbers to prevent overflow.
-                            let font_size = compute_font_size(&merged_value);
-
-                            tile.style().set_property("font-size", &font_size).unwrap();
-                            log!("font-size:", &font_size);
-                            tile.set_inner_html(&merged_value);
-                            tile.style().set_property("--background_color", &new_background_color).unwrap();
-                            tile.style().set_property("--text_color", &new_text_color).unwrap();
-                            tile.style().set_property("animation", "expand-merge 0.10s ease-in-out").unwrap();
-                            
-                            let parent_node = tile.parent_node().unwrap();
-                            parent_node.remove_child(&tile).unwrap();
-                            parent_node.append_child(&tile).unwrap();
-                            
-                            // Remove merged Tile from the board.
-                            let document = gloo::utils::document();
-                            let merged_tile_id = tile.style().get_property_value("--merged_id").unwrap();
-                            let merged_tile_id = convert_id_unicode(&merged_tile_id);
-                            let merged_tile = document.query_selector(&merged_tile_id).unwrap().expect(&( "Failed to find ID".to_owned() + &merged_tile_id ));
-                            let merged_tile = merged_tile.dyn_ref::<HtmlElement>().unwrap();
-                            parent_node.remove_child(&merged_tile).unwrap();
-
-                            tile.style().set_property("--merged_value", "").unwrap();
-
-                            // Update score
-                            let score = game_state_for_sliding_listener.borrow().score;
-
-                            if let Some(score_ref) = score_merge_clone.cast::<HtmlElement>() {
-                                score_ref.set_inner_html(&score.to_string());
-                            }
-                        }
-                    },
-                    Err(_) => (),
-                }
-            }
         }) as Box<dyn FnMut(AnimationEvent)>);
 
         body.add_event_listener_with_callback("animationend", merge_expand.as_ref().unchecked_ref()).unwrap();
