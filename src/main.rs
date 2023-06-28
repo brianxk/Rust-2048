@@ -88,16 +88,16 @@ async fn slide_tile(html_tile: &HtmlElement, game_tile: &rust_2048::Tile) {
     html_tile.style().set_property("--new_left", &new_left_offset).unwrap();
     html_tile.style().set_property("--new_top", &new_top_offset).unwrap();
 
-    let parent_node = html_tile.parent_node().unwrap();
-    parent_node.remove_child(&html_tile).unwrap();
-    parent_node.append_child(&html_tile).unwrap();
+    // let parent_node = html_tile.parent_node().unwrap();
+    // parent_node.remove_child(&html_tile).unwrap();
+    // parent_node.append_child(&html_tile).unwrap();
 
-    html_tile.style().set_property("animation", "sliding 0.10s ease-in-out forwards").unwrap();
+    // html_tile.style().set_property("animation", "sliding 0.10s ease-in-out forwards").unwrap();
 
     // sleep(Duration::from_millis(100)).await;
     
-    // html_tile.style().set_property("top", &new_top_offset).unwrap();
-    // html_tile.style().set_property("left", &new_left_offset).unwrap();
+    html_tile.style().set_property("top", &new_top_offset).unwrap();
+    html_tile.style().set_property("left", &new_left_offset).unwrap();
 }
 
 async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx: Receiver<String>) {
