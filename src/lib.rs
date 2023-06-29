@@ -413,16 +413,16 @@ impl Game {
             true => match self.get_random_free_slot() {
                 Some((i, j)) => {
                     // New tile ID should not use the ID of a tile that was merged this turn.
-                    let new_tile_id = self.get_id().unwrap();
+                    let new_id = self.get_id().unwrap();
                     self.recycle_ids(recycled_ids);
 
                     let new_tile_value = self.generate_tile_value();
                     let (tile_background, tile_text) = self.get_tile_colors(new_tile_value);
 
-                    let new_tile = Tile::new(new_tile_value, new_tile_id, tile_background, tile_text, i, j);
+                    let new_tile = Tile::new(new_tile_value, new_id, tile_background, tile_text, i, j);
                     self.board[i][j] = Some(new_tile);
 
-                    InputResult::Ok(new_tile_id, self.get_tiles())
+                    InputResult::Ok(new_id, self.get_tiles())
                 },
                 None => unreachable!(),
             }
