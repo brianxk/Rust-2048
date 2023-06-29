@@ -171,7 +171,10 @@ fn slide_tile(html_tile: &HtmlElement, game_tile: &rust_2048::Tile) {
 
 async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx: UnboundedReceiver<String>) {
     while let Some(key_code) = keydown_rx.recv().await {
-        match game_state.borrow_mut().receive_input(&key_code) {
+        let game_state_mut = game_state.clone();
+        let mut game_state_mut = game_state_mut.borrow_mut();
+
+        match game_state_mut.receive_input(&key_code) {
             InputResult::Ok(new_tile_id, tiles) => {
                 log!("Move successful!");
                 let document = gloo::utils::document();
@@ -215,13 +218,18 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
                             tiles_merged = true;
                         }
 
-                        // Removing marked tiles and adding new tile should occur simultaneously
-                        // with merge-expand animation.
+                        // Removing marked tiles, adding new tile, and updating score 
+                        // should occur simultaneously with merge-expand animation.
                         for id in removed_tile_ids {
                             remove_tile(id);
                         }
 
+                        // Render the new Tile.
                         add_tile(get_tile_by_id(&tiles, new_tile_id).expect("Failed to find new Tile."));
+
+                        // Update the score.
+                        let score_node = document.query_selector(".score").unwrap().unwrap();
+                        score_node.set_inner_html(&game_state_mut.score.to_string());
 
                         // Wait for merge-expand animation to complete.
                         if tiles_merged {
@@ -243,10 +251,6 @@ fn content() -> Html {
     let game_state = Rc::new(RefCell::new(Game::new()));
     let game_state_for_move_listener = Rc::clone(&game_state);
     // let game_state_for_sliding_listener = Rc::clone(&game_state);
-    // let keypressed_for_keydown = Rc::new(RefCell::new(false));
-    // let keypressed_for_keyup = keypressed_for_keydown.clone();
-    let score_ref = use_node_ref();
-    // let score_merge_clone = score_ref.clone();
     
     // Prevents use of arrow keys for scrolling the page
     preventDefaultScrolling();
@@ -336,7 +340,7 @@ fn content() -> Html {
 
     html! {
         <div class="content" key={new_game_render}>
-            <Metadata score={0} node_ref={score_ref} {onclick}/>
+            <Metadata score={0} {onclick}/>
             <div class="board-container">
                 <GameBoard/>
                 { 
@@ -369,7 +373,6 @@ fn content() -> Html {
 struct MetadataProps {
     onclick: Callback<MouseEvent>,
     score: u32,
-    node_ref: NodeRef,
 }
 
 #[function_component(Metadata)]
@@ -388,7 +391,7 @@ fn metadata(props: &MetadataProps) -> Html {
 
     html! {
         <div class="metadata" style={style_args}>
-            <Score node_ref={props.node_ref.clone()} score={props.score}/>
+            <Score score={props.score}/>
             <button class="new-game" {onclick}>{ "New Game" }</button>
         </div>
     }
@@ -397,13 +400,12 @@ fn metadata(props: &MetadataProps) -> Html {
 #[derive(Properties, PartialEq)]
 struct ScoreProps {
     score: u32,
-    node_ref: NodeRef,
 }
 
 #[function_component(Score)]
 fn score(props: &ScoreProps) -> Html {
     html! {
-        <div ref={props.node_ref.clone()} class="score">{props.score}</div>
+        <div class="score">{props.score}</div>
     }
 }
 
