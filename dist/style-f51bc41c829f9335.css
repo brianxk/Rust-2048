@@ -101,12 +101,7 @@ table {
     text-align: center;
     line-height: 120px;
     position: absolute;
-    top: var(--top);
-    left: var(--left);
-    background-color: var(--background_color);
-    color: var(--text_color);
-    transition: left 250ms ease-in-out, top 250ms ease-in-out;
-    animation: expand-init 0.25s ease-in-out;
+    animation: expand-init 200ms ease-in-out;
 }
 
 @keyframes expand-init {
@@ -159,8 +154,8 @@ table {
         top: var(--current_top);
     }
     100% {
-        left: var(--new_left);
         top: var(--new_top);
+        left: var(--new_left);
     }
 }
 
