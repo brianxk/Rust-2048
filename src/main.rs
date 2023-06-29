@@ -8,7 +8,6 @@ use wasm_bindgen::{JsCast, UnwrapThrowExt};
 use web_sys::{HtmlElement, window};
 use std::rc::Rc;
 use std::cell::RefCell;
-use substring::Substring;
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen_futures::spawn_local;
@@ -207,6 +206,7 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
                             }
                         }
 
+                        // Wait for slide animation to complete.
                         sleep(Duration::from_millis(SLIDE_DURATION)).await;
                         
                         let mut tiles_merged = false;
@@ -215,13 +215,15 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
                             tiles_merged = true;
                         }
 
-                        // Remove marked tiles from the frontend.
+                        // Removing marked tiles and adding new tile should occur simultaneously
+                        // with merge-expand animation.
                         for id in removed_tile_ids {
                             remove_tile(id);
                         }
 
                         add_tile(get_tile_by_id(&tiles, new_tile_id).expect("Failed to find new Tile."));
 
+                        // Wait for merge-expand animation to complete.
                         if tiles_merged {
                             sleep(Duration::from_millis(EXPAND_DURATION)).await;
                         }
@@ -240,11 +242,11 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
 fn content() -> Html {
     let game_state = Rc::new(RefCell::new(Game::new()));
     let game_state_for_move_listener = Rc::clone(&game_state);
-    let game_state_for_sliding_listener = Rc::clone(&game_state);
-    let keypressed_for_keydown = Rc::new(RefCell::new(false));
-    let keypressed_for_keyup = keypressed_for_keydown.clone();
+    // let game_state_for_sliding_listener = Rc::clone(&game_state);
+    // let keypressed_for_keydown = Rc::new(RefCell::new(false));
+    // let keypressed_for_keyup = keypressed_for_keydown.clone();
     let score_ref = use_node_ref();
-    let score_merge_clone = score_ref.clone();
+    // let score_merge_clone = score_ref.clone();
     
     // Prevents use of arrow keys for scrolling the page
     preventDefaultScrolling();
@@ -466,18 +468,9 @@ fn convert_to_pixels(i: usize, j: usize) -> (u16, u16) {
     (top_offset, left_offset)
 }
 
-/// Accepts a top, left pair of pixel offsets and returns the grid coordinate equivalents for array indexing
-/// This function will handle the String parsing, as such the offset values should be given "as is" e.g. "252px".
-fn convert_to_indexes(top: &str, left: &str) -> (usize, usize) {
-    let top = pixel_to_u16(top);
-    let left = pixel_to_u16(left);
-    
-    (pixel_to_index(top), pixel_to_index(left))
-}
-
 /// Determines font-size based on number of digits to prevent overflow.
 fn compute_font_size(value: &String) -> String {
-    let mut font_size = "";
+    let font_size;
     let len = value.len();
 
     if len > 5 {
@@ -491,22 +484,6 @@ fn compute_font_size(value: &String) -> String {
     }
 
     font_size.to_string()
-}
-
-/// Accepts a String pixel value e.g. "252px" and returns it parsed as u16.
-fn pixel_to_u16(pixel_value: &str) -> u16 {
-    pixel_value.substring(0, pixel_value.chars().count() - 2).parse::<u16>().unwrap()
-}
-
-/// Accepts pixel values as u16 and returns the corresponding grid index.
-fn pixel_to_index(pixel_value: u16) -> usize {
-    match pixel_value {
-        4 => 0,
-        128 => 1,
-        252 => 2,
-        376 => 3,
-        _ => unreachable!(),
-    }
 }
 
 /// Accepts a Vec of Tile references and an ID and returns an Option Tile with the corresponding ID if it
