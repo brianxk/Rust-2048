@@ -14,12 +14,14 @@ use wasm_bindgen_futures::spawn_local;
 use tokio::sync::mpsc;
 use yew::platform::time::sleep;
 use core::time::Duration;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
 const BORDER_SPACING: u16 = 4;
 const TILE_DIMENSION: u16 = 120;
 const COLORS: Colors = Colors::new();
-const SLIDE_DURATION: u64 = 150; // milliseconds
-const EXPAND_DURATION: u64 = 200; // milliseconds
+const SLIDE_DURATION: u64 = 100; // milliseconds
+const EXPAND_DURATION: u64 = 120; // milliseconds
 
 #[wasm_bindgen(module = "/prevent_arrow_scrolling.js")]
 extern "C" {
@@ -60,14 +62,14 @@ struct TileProps {
 
 #[function_component(Tile)]
 fn tile(props: &TileProps) -> Html {
-    // let expand_init_animation = format!("expand-init {}ms ease-in-out;", EXPAND_DURATION);
-    let style_args = format!("top: {}px; left: {}px; background-color: {}; color: {}; font-size: {};", 
+    let expand_init_animation = format!("expand-init {}ms ease-in-out;", EXPAND_DURATION);
+    let style_args = format!("top: {}px; left: {}px; background-color: {}; color: {}; font-size: {}; animation: {};", 
                            props.top_offset,
                            props.left_offset,
                            props.background_color,
                            props.text_color,
-                           compute_font_size(&props.value.to_string())
-                           // expand_init_animation
+                           compute_font_size(&props.value.to_string()),
+                           expand_init_animation,
                            );
 
     let tile_id = props.id.to_string();
@@ -90,15 +92,15 @@ fn add_tile(game_tile: &rust_2048::Tile) {
     let (top_offset, left_offset) = convert_to_pixels(game_tile.row, game_tile.col);
 
     let font_size = compute_font_size(&game_tile.value.to_string());
-    // let expand_init_animation = format!("expand-init {}ms ease-in-out;", EXPAND_DURATION);
+    let expand_init_animation = format!("expand-init {}ms ease-in-out;", EXPAND_DURATION);
 
-    let style_args = format!("top: {}px; left: {}px; background-color: {}; color: {}; font-size: {};",
+    let style_args = format!("top: {}px; left: {}px; background-color: {}; color: {}; font-size: {}; animation: {};",
        top_offset,
        left_offset,
        &game_tile.background_color,
        &game_tile.text_color,
        font_size,
-       // expand_init_animation,
+       expand_init_animation,
     );
 
     let document = gloo::utils::document();
@@ -113,17 +115,6 @@ fn add_tile(game_tile: &rust_2048::Tile) {
 
     let board_container = document.query_selector(".board-container").unwrap().unwrap();
     board_container.append_child(&html_tile).unwrap();
-
-    // let x = html!{
-    //     <Tile
-    //         value={&game_tile.value}
-    //         background_color={game_tile.background_color.clone()}
-    //         text_color={game_tile.text_color.clone()}
-    //         id={&game_tile.id}
-    //         top_offset={top_offset}
-    //         left_offset={left_offset}
-    //     />
-    // };
 }
 
 fn slide_tile(html_tile: &HtmlElement, game_tile: &rust_2048::Tile) {
@@ -233,7 +224,7 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
 
                         // Wait for merge-expand animation to complete.
                         if tiles_merged {
-                            sleep(Duration::from_millis(EXPAND_DURATION)).await;
+                            // sleep(Duration::from_millis(EXPAND_DURATION)).await;
                         }
                     },
                     Err(_) => log!("NodeList could not be found."),
@@ -249,17 +240,16 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
 #[function_component(Content)]
 fn content() -> Html {
     let game_state = Rc::new(RefCell::new(Game::new()));
-    let game_state_for_move_listener = Rc::clone(&game_state);
-    // let game_state_for_sliding_listener = Rc::clone(&game_state);
+    let game_state_for_animation_listener = Rc::clone(&game_state);
     
     // Prevents use of arrow keys for scrolling the page
     preventDefaultScrolling();
 
-    let (keydown_tx, keydown_rx) = mpsc::unbounded_channel();
-    
     // Attach a keydown event listener to the document.
     use_effect(move || {
-        spawn_local(process_keydown_messages(game_state_for_move_listener, keydown_rx));
+        let (keydown_tx, keydown_rx) = mpsc::unbounded_channel();
+        spawn_local(process_keydown_messages(game_state_for_animation_listener, keydown_rx));
+        let counter = Arc::new(AtomicUsize::new(0));
 
         let document = gloo::utils::document();
         let listener = EventListener::new(&document, "keydown", move |event| {
@@ -285,8 +275,11 @@ fn content() -> Html {
                 match html_tile.style().get_property_value("--merged_value") {
                     Ok(merged_value) => {
                         if !merged_value.is_empty() {
+                            // Update font-size to prevent overflow before setting the new Tile value.
+                            html_tile.style().set_property("font-size", &compute_font_size(&merged_value));
                             html_tile.set_inner_html(&merged_value);
-                            
+
+                            // Obtain and set appropriate Tile colors.
                             let new_background_color = html_tile.style().get_property_value("--background_color").unwrap();
                             let new_text_color = html_tile.style().get_property_value("--text_color").unwrap();
 
@@ -304,12 +297,22 @@ fn content() -> Html {
             }
         }) as Box<dyn FnMut(AnimationEvent)>);
 
+        // If the user enters more keys before an animation has completed, animationend will never
+        // fire and the merging logic above will not execute until the animation from the user's 
+        // final keystroke has completed.
+        //
+        // For instance, a group of sequential 2-Tiles will appear to be moving across the screen
+        // but only change into their merged versions at the end of the animations. To prevent
+        // this, the animationcancel event can be used to ensure the merging logic is "fast
+        // forwarded" whenever an animation is canceled prematurely.
         body.add_event_listener_with_callback("animationend", merge_expand.as_ref().unchecked_ref()).unwrap();
+        body.add_event_listener_with_callback("animationcancel", merge_expand.as_ref().unchecked_ref()).unwrap();
 
         || {
             // Must remove the callback or else memory leak will occur each time New Game is clicked.
             let body = gloo::utils::body();
             body.remove_event_listener_with_callback("animationend", merge_expand.as_ref().unchecked_ref()).unwrap();
+            body.remove_event_listener_with_callback("animationcancel", merge_expand.as_ref().unchecked_ref()).unwrap();
             drop(merge_expand)
         }
     });

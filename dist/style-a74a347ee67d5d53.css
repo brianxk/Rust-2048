@@ -101,7 +101,7 @@ table {
     text-align: center;
     line-height: 120px;
     position: absolute;
-    animation: expand-init 200ms ease-in-out;
+    /* animation: expand-init 200ms ease-in-out; */
 }
 
 @keyframes expand-init {
