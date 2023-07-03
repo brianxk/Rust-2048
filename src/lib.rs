@@ -160,8 +160,7 @@ impl Game {
         let first_tile_id = game.get_id().unwrap();
         let (background_color, text_color) = game.get_tile_colors(first_tile_value);
 
-        // let first_tile = Tile::new(first_tile_value,
-        let first_tile = Tile::new(90000,
+        let first_tile = Tile::new(first_tile_value,
                                    first_tile_id, 
                                    background_color,
                                    text_color,
@@ -174,8 +173,7 @@ impl Game {
         let second_tile_id = game.get_id().unwrap();
         let (background_color, text_color) = game.get_tile_colors(second_tile_value);
 
-        // let second_tile = Tile::new(second_tile_value,
-        let second_tile = Tile::new(90000,
+        let second_tile = Tile::new(second_tile_value,
                                     second_tile_id,
                                     background_color,
                                     text_color,
