@@ -1,7 +1,9 @@
 * {
     margin: 0;
     padding: 0;
-    font-family: "Andale Mono", AndaleMono, monospace;
+    /* font-family: "Andale Mono", AndaleMono, monospace; */
+    /* font-family: 'Cutive Mono', monospace; */
+    font-family: 'Roboto Serif', serif;
 }
 
 html, body {
@@ -20,6 +22,7 @@ body > * {
 }
 
 div.header {
+    font-size: 2.0em;
     display: inline-block;
     height: 75px;
     color: var(--header_text);
@@ -71,6 +74,10 @@ div.footer {
     color: var(--footer_text);
 }
 
+a:visited {
+    color: var(--visited_color);
+}
+
 table {
     border-spacing: 4px;
     border-radius: 10px;
@@ -85,28 +92,27 @@ table {
     background-color: var(--cell_background);
 }
 
-.module h2 {
-  font-size: 1em;
-  container-name: sidebar
-}
-
-@container sidebar (min-width: 700px) {
-  .module h2 {
-    font-size: 2em;
-  }
-}
-
 .tile {
-    font-family: Verdana, Geneva, sans-serif;
-    text-align: center;
-    line-height: 120px;
-    font-size: 3.0em;
+    font-family: 'Roboto Serif', serif;
+    font-weight: 200;
+    /* text-align: center; */
+    /* vertical-align: middle; */
+    /* line-height: 120px; */
+    display: flex;
+    justify-content: center;
+    align-items: center;
     position: absolute;
-    top: var(--top);
-    left: var(--left);
-    background-color: var(--background_color);
-    color: var(--text_color);
-    animation: expand-init 0.25s ease-in-out;
+}
+
+@keyframes sliding {
+    0% {
+        left: var(--current_left);
+        top: var(--current_top);
+    }
+    100% {
+        top: var(--new_top);
+        left: var(--new_left);
+    }
 }
 
 @keyframes expand-init {
@@ -135,6 +141,11 @@ table {
   }
 }
 
+.gameover {
+    position: relative;
+    height: 560px;
+}
+
 .typed {
     overflow: hidden;
     white-space: nowrap;
@@ -151,16 +162,5 @@ table {
 
 @keyframes blinking {
   0% {border-right-color: transparent}
-}
-
-@keyframes sliding {
-    0% {
-        left: var(--current_left);
-        top: var(--current_top);
-    }
-    100% {
-        left: var(--new_left);
-        top: var(--new_top);
-    }
 }
 
