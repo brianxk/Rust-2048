@@ -20,8 +20,7 @@ pub struct Tile {
     pub text_color: String,
     pub row: usize,
     pub col: usize,
-    // Some(id, row, col)
-    pub merged: Option<(usize, usize, usize)>,
+    pub merged: Option<Box<Tile>>,
 }
 
 impl Tile {
@@ -49,7 +48,7 @@ impl std::fmt::Display for Tile {
 }
 
 /// Struct that holds the choices for new tiles and the probability with which they will appear.
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 struct NewTileParams {
     tile_choices: [u32; 2],
     tile_weights: [u8; 2],
@@ -90,30 +89,26 @@ pub struct Colors {
 impl Colors {
     pub const fn new() -> Self {
         Colors {
-            background_dark: "#2B2A4C",
-            background_light: "#2B2A4C",
-            text_dark: "#09080f",
-            text_light: "#EA906C",
-            button: "#BCBCCC",
-            button_hover: "#F0F0F0",
-            board: "#EA906C",
-            cell: "#BCBCCC",
-            // button: "#F0F0F0",
-            // button_hover: "#bcbccc",
-            // board: "#F0F0F0",
-            // cell: "#bcbccc",
+            background_dark: "#072931",
+            background_light: "#072931",
+            text_dark: "#022244",
+            text_light: "#f2ba0d",
+            button: "#92cdb9",
+            button_hover: "#b4ddcf",
+            board: "#022244",
+            cell: "#92cdb9",
         }
     }
 }
 
 pub struct InvalidMove;
 
-pub enum InputResult {
-    Ok(usize),
+pub enum InputResult<'a> {
+    Ok(usize, Vec<&'a Tile>),
     Err(InvalidMove),
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub struct Game {
     pub board: [[Option<Tile>; BOARD_DIMENSION]; BOARD_DIMENSION],
     new_tile_params: NewTileParams,
@@ -157,6 +152,9 @@ impl Game {
         } else {
             second_tile_value = game.generate_tile_value();
         }
+
+        // let first_tile_value = 16384;
+        // let second_tile_value = 131072;
 
         let first_tile_pos = game.get_random_free_slot().expect("New game board, should not panic.");
         let first_tile_id = game.get_id().unwrap();
@@ -274,6 +272,38 @@ impl Game {
         }
     }
 
+    fn clone_board(original_board: &[[Option<Tile>; BOARD_DIMENSION]; BOARD_DIMENSION]) -> [[Option<Tile>; BOARD_DIMENSION]; BOARD_DIMENSION] {
+        const EMPTY_TILE: Option<Tile> = None;
+        const EMPTY_ROW: [Option<Tile>; BOARD_DIMENSION] = [EMPTY_TILE; BOARD_DIMENSION];
+
+        let mut cloned_board = [EMPTY_ROW; BOARD_DIMENSION];
+
+        for i in 0..BOARD_DIMENSION {
+            cloned_board[i] = original_board[i].clone();
+        }
+
+        cloned_board
+    }
+
+    /// Returns true if the game is over. The game is over if no more moves are possible. This will
+    /// be tested by calling the `receive_input` function in all 4 directions on the current board
+    /// state. Although acquiring the 2048 Tile is the win condition, this has no effect on
+    /// gameplay and thus is not checked here. The frontend will be responsible for checking if
+    /// the 2048 Tile has been acquired and for notifying the player.
+    pub fn game_over(&self) -> bool {
+        let directions = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
+
+        for direction in directions {
+            let mut current_game = self.clone();
+
+            if let InputResult::Ok(_, _) = current_game.receive_input(direction) {
+                return false
+            }
+        }
+
+        true
+    }
+
     /// Receives the user's input and slides tiles in the specified direction.
     pub fn receive_input(&mut self, input: &str) -> InputResult {
         let mut move_occurred = false;
@@ -306,7 +336,7 @@ impl Game {
                             if row.checked_sub(i).is_some_and(|diff| self.board[diff][col].as_ref().unwrap().value == tile.value && self.board[diff][col].as_ref().unwrap().merged.is_none()) {
                                 let removed_tile = self.board[row - i][col].take().unwrap();
 
-                                self.merge_tiles(&mut tile, &removed_tile, &mut recycled_ids);
+                                self.merge_tiles(&mut tile, removed_tile.clone(), &mut recycled_ids);
                                 self.update_tile_and_board(tile, removed_tile.row, removed_tile.col);
                                 move_occurred = true;
                             } else {
@@ -334,7 +364,7 @@ impl Game {
                             if row.checked_add_max(i, BOARD_DIMENSION).is_some_and(|sum| self.board[sum][col].as_ref().unwrap().value == tile.value && self.board[sum][col].as_ref().unwrap().merged.is_none()) {
                                 let removed_tile = self.board[row + i][col].take().unwrap();
 
-                                self.merge_tiles(&mut tile, &removed_tile, &mut recycled_ids);
+                                self.merge_tiles(&mut tile, removed_tile.clone(), &mut recycled_ids);
                                 self.update_tile_and_board(tile, removed_tile.row, removed_tile.col);
                                 move_occurred = true;
                             } else {
@@ -362,7 +392,7 @@ impl Game {
                             if col.checked_sub(i).is_some_and(|diff| self.board[row][diff].as_ref().unwrap().value == tile.value && self.board[row][diff].as_ref().unwrap().merged.is_none()) {
                                 let removed_tile = self.board[row][col - i].take().unwrap();
                                 
-                                self.merge_tiles(&mut tile, &removed_tile, &mut recycled_ids);
+                                self.merge_tiles(&mut tile, removed_tile.clone(), &mut recycled_ids);
                                 self.update_tile_and_board(tile, removed_tile.row, removed_tile.col);
 
                                 move_occurred = true;
@@ -392,7 +422,7 @@ impl Game {
                             if col.checked_add_max(i, BOARD_DIMENSION).is_some_and(|sum| self.board[row][sum].as_ref().unwrap().value == tile.value && self.board[row][sum].as_ref().unwrap().merged.is_none()) {
                                 let removed_tile = self.board[row][col + i].take().unwrap();
 
-                                self.merge_tiles(&mut tile, &removed_tile, &mut recycled_ids);
+                                self.merge_tiles(&mut tile, removed_tile.clone(), &mut recycled_ids);
                                 self.update_tile_and_board(tile, removed_tile.row, removed_tile.col);
 
                                 move_occurred = true;
@@ -422,9 +452,8 @@ impl Game {
 
                     let new_tile = Tile::new(new_tile_value, new_id, tile_background, tile_text, i, j);
                     self.board[i][j] = Some(new_tile);
-                    // Create a systematic way to decide background color. Modulus?
-                    // Consider re-doing the colorscheme of the board in this step.
-                    InputResult::Ok(new_id)
+
+                    InputResult::Ok(new_id, self.get_tiles())
                 },
                 None => unreachable!(),
             }
@@ -434,18 +463,23 @@ impl Game {
     }
 
     /// Accepts two Tile references and performs necessary steps in merging them. This involves
-    /// storing the removed Tile's ID in the resultant Tile's `merged` field and updating the Vec
-    /// of recycled IDs with this ID. The resultant Tile's value is doubled to reflect the merge
-    /// and the score is incremented by this new value. Finally the resultant Tile's color is also
-    /// updated to reflect its new value.
-    fn merge_tiles(&mut self, merged_tile: &mut Tile, removed_tile: &Tile, recycled_ids: &mut Vec<usize>) {
-        merged_tile.merged = Some((removed_tile.id, removed_tile.row, removed_tile.col));
+    /// storing the removed Tile in the resultant Tile's `merged` field and updating the Vec
+    /// of recycled IDs with the removed Tile's ID. 
+    ///
+    /// The resultant Tile needs to maintain a clone of the removed Tile so that the frontend has
+    /// access to the removed Tile's coordinates. This is necessary because the removed Tile needs
+    /// to be moved into its final position before being deleted for animation integrity.
+    ///
+    /// The resultant Tile's value is doubled to reflect the merge and the score is incremented by 
+    /// this new value. Finally the resultant Tile's color is also updated to reflect its new value.
+    fn merge_tiles(&mut self, merged_tile: &mut Tile, removed_tile: Tile, recycled_ids: &mut Vec<usize>) {
         recycled_ids.push(removed_tile.id);
+        merged_tile.merged = Some(Box::new(removed_tile));
 
         merged_tile.value *= 2;
         self.score += merged_tile.value;
 
-        merged_tile.background_color = self.get_tile_colors(merged_tile.value).0;
+        (merged_tile.background_color, merged_tile.text_color) = self.get_tile_colors(merged_tile.value);
     }
 
     /// Receives a tile, the new row and col indexes, and updates both the tile's internal row and
@@ -491,7 +525,27 @@ impl Game {
         let interpolated_color = interpolate_hex_colors(&base_color, &other_color, interpolation_offset / num_interpolation_steps as f32);
         let tile_background = interpolated_color.to_string();
 
-        (tile_background.to_string(), "darkblue".to_string())
+        let relative_luminance = 0.2126 * interpolated_color.r as f32 +
+                                 0.7152 * interpolated_color.g as f32 +
+                                 0.0722 * interpolated_color.b as f32;
+
+        let relative_luminance = relative_luminance / 255.0;
+
+        let tile_text;
+        let colors = Colors::new();
+
+        // log!("Tile value:", tile_value);
+        // log!("Relative luminance:", relative_luminance);
+        
+        if relative_luminance <= 0.35 {
+            tile_text = colors.text_light;
+            // log!("Light text.")
+        } else {
+            tile_text = colors.text_dark;
+            // log!("Dark text.")
+        }
+
+        (tile_background.to_string(), tile_text.to_string())
     }
 }
 
