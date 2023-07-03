@@ -8,19 +8,31 @@ use web_sys::{HtmlElement, window, CssAnimation, AnimationPlayState};
 use std::rc::Rc;
 use std::cell::RefCell;
 use wasm_bindgen::prelude::wasm_bindgen;
-use wasm_bindgen::closure::Closure;
 use wasm_bindgen_futures::spawn_local;
 use tokio::sync::mpsc;
 use yew::platform::time::sleep;
 use core::time::Duration;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::atomic::{AtomicU16, Ordering};
+use std::sync::{Arc, Mutex};
+use lazy_static::lazy_static;
 
 const BORDER_SPACING: u16 = 4;
 const TILE_DIMENSION: u16 = 120;
 const COLORS: Colors = Colors::new();
-const SLIDE_DURATION: u64 = 900; // milliseconds
-const EXPAND_DURATION: u64 = 120; // milliseconds
+
+// Durations in milliseconds.
+const DEFAULT_SLIDE_DURATION: u64 = 100;
+const DEFAULT_EXPAND_DURATION: u64 = 75;
+const DEFAULT_SLEEP_DURATION: u64 = 10;
+
+// Globally mutable variables. If the number of player moves in the queue is greater than 1, all
+// animation durations will be set to 0. Otherwise the original values will be restored.
+lazy_static! {
+    static ref CURRENT_SLIDE_DURATION: Mutex<u64> = Mutex::new(DEFAULT_SLIDE_DURATION);
+    static ref CURRENT_EXPAND_DURATION: Mutex<u64> = Mutex::new(DEFAULT_EXPAND_DURATION);
+    static ref CURRENT_SLEEP_DURATION: Mutex<u64> = Mutex::new(DEFAULT_SLEEP_DURATION);
+}
+
 
 #[wasm_bindgen(module = "/prevent_arrow_scrolling.js")]
 extern "C" {
@@ -61,7 +73,7 @@ struct TileProps {
 
 #[function_component(Tile)]
 fn tile(props: &TileProps) -> Html {
-    let expand_init_animation = format!("expand-init {}ms ease-in-out;", EXPAND_DURATION);
+    let expand_init_animation = format!("expand-init {}ms ease-in-out;", CURRENT_EXPAND_DURATION.lock().unwrap());
     let style_args = format!("top: {}px; left: {}px; background-color: {}; color: {}; font-size: {}; animation: {};", 
                            props.top_offset,
                            props.left_offset,
@@ -75,6 +87,18 @@ fn tile(props: &TileProps) -> Html {
 
     html! {
         <div id={tile_id} class="tile cell" style={style_args}>{props.value}</div>
+    }
+}
+
+fn set_animation_durations(input_counter: Arc<AtomicU16>) {
+    if input_counter.load(Ordering::SeqCst) > 1 {
+        *CURRENT_SLIDE_DURATION.lock().unwrap() = 0;
+        *CURRENT_EXPAND_DURATION.lock().unwrap() = 0;
+        // *CURRENT_SLEEP_DURATION.lock().unwrap() = 20;
+    } else {
+        *CURRENT_SLIDE_DURATION.lock().unwrap() = DEFAULT_SLIDE_DURATION;
+        *CURRENT_EXPAND_DURATION.lock().unwrap() = DEFAULT_SLIDE_DURATION;
+        // *CURRENT_SLEEP_DURATION.lock().unwrap() = DEFAULT_SLIDE_DURATION;
     }
 }
 
@@ -94,7 +118,7 @@ fn update_score(new_score: u32) {
 }
 
 /// Waits for the given animation to complete.
-async fn await_animations(animation_name: String, sleep_duration: u64) {
+async fn await_animations(animation_name: String) {
     let document = gloo::utils::document();
     let animations = document.get_animations();
     let mut id = 0;
@@ -106,12 +130,12 @@ async fn await_animations(animation_name: String, sleep_duration: u64) {
             animation.set_id(&c_id);
             let mut play_state = animation.play_state();
 
-            log!("Looping", &c_id);
-            // log!(animation);
-            log!("play_state before:", play_state);
+            // log!("Looping", &c_id);
+            // log!("play_state before:", play_state);
 
             while !matches!(play_state, AnimationPlayState::Finished) {
-                sleep(Duration::from_millis(sleep_duration)).await;
+                log!(&animation_name, "sleeping . . .");
+                sleep(Duration::from_millis(*CURRENT_SLEEP_DURATION.lock().unwrap())).await;
                 
                 let animations = document.get_animations();
 
@@ -120,7 +144,7 @@ async fn await_animations(animation_name: String, sleep_duration: u64) {
                     let a = CssAnimation::from(a);
                     if a.animation_name() == animation_name {
                         if a.id() == c_id {
-                            log!("Found matching ID", a.id());
+                            // log!("Found matching ID", a.id());
                             animation = Some(a);
                             break;
                         }
@@ -134,7 +158,7 @@ async fn await_animations(animation_name: String, sleep_duration: u64) {
                 }
             }
 
-            log!("play_state after:", play_state);
+            // log!("play_state after:", play_state);
 
             id += 1;
         }
@@ -145,7 +169,7 @@ fn add_tile(game_tile: &rust_2048::Tile) {
     let (top_offset, left_offset) = convert_to_pixels(game_tile.row, game_tile.col);
 
     let font_size = compute_font_size(&game_tile.value.to_string());
-    let expand_init_animation = format!("expand-init {}ms ease-in-out;", EXPAND_DURATION);
+    let expand_init_animation = format!("expand-init {}ms ease-in-out;", CURRENT_EXPAND_DURATION.lock().unwrap());
 
     let style_args = format!("top: {}px; left: {}px; background-color: {}; color: {}; font-size: {}; animation: {};",
        top_offset,
@@ -205,7 +229,7 @@ fn merge_tiles() {
                         html_tile.style().set_property("--text_color", "").unwrap();
 
                         // Initiate merging expand animation.
-                        let expanding_animation = format!("expand-merge {}ms ease-in-out", EXPAND_DURATION);
+                        let expanding_animation = format!("expand-merge {}ms ease-in-out", CURRENT_EXPAND_DURATION.lock().unwrap());
                         html_tile.style().set_property("animation", &expanding_animation).unwrap();
                         re_append(html_tile);
                     }
@@ -235,7 +259,7 @@ fn slide_tile(html_tile: &HtmlElement, game_tile: &rust_2048::Tile) {
     html_tile.style().set_property("--new_top", &new_top_offset).unwrap();
     html_tile.style().set_property("--new_left", &new_left_offset).unwrap();
 
-    let sliding_animation = format!("sliding {}ms ease-in-out forwards", SLIDE_DURATION);
+    let sliding_animation = format!("sliding {}ms ease-in-out forwards", CURRENT_SLIDE_DURATION.lock().unwrap());
 
     if let Some(_) = &game_tile.merged {
         // Tiles with the --merged_value property set will be marked for the merging animation
@@ -286,7 +310,7 @@ fn slide_tiles(node_list: web_sys::NodeList, tiles: &Vec<&rust_2048::Tile>) -> V
     removed_tile_ids
 }
 
-async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx: UnboundedReceiver<String>) {
+async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx: UnboundedReceiver<String>, input_counter: Arc<AtomicU16>) {
     while let Some(key_code) = keydown_rx.recv().await {
         log!("Key received:", &key_code);
         let game_state_mut = game_state.clone();
@@ -299,12 +323,20 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
                 
                 match document.query_selector_all("[class='tile cell']") {
                     Ok(node_list) => {
+                        set_animation_durations(input_counter.clone());
+
                         let removed_tile_ids = slide_tiles(node_list, &tiles);
 
                         // Wait for slide animation to complete.
-                        // sleep(Duration::from_millis(SLIDE_DURATION)).await;
+                        // sleep(Duration::from_millis(*CURRENT_SLIDE_DURATION.lock().unwrap())).await;
+
+                        // Due to browser inconistencies, the above sleep may not be sufficient for
+                        // all animations to reach completion. await_animations() will sleep in
+                        // increments set by `sleep_duration` until all animations reach the
+                        // "finished" state.
+
                         let sleep_duration = 20;
-                        await_animations("sliding".to_string(), sleep_duration).await;
+                        await_animations("sliding".to_string()).await;
                         // Consider removing animations once they are complete if this approach does not work.
                         
                         // Removing marked tiles, adding new tile, and updating score 
@@ -312,6 +344,8 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
                         for id in removed_tile_ids {
                             remove_tile(id);
                         }
+
+                        set_animation_durations(input_counter.clone());
 
                         // Render the new Tile.
                         add_tile(get_tile_by_id(&tiles, new_tile_id).expect("Failed to find new Tile."));
@@ -322,7 +356,8 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
                         merge_tiles();
 
                         // Wait for merge-expand animation to complete.
-                        await_animations("expand-merge".to_string(), sleep_duration).await;
+                        // sleep(Duration::from_millis(*CURRENT_EXPAND_DURATION.lock().unwrap())).await;
+                        await_animations("expand-merge".to_string()).await;
                     },
                     Err(_) => log!("NodeList could not be found."),
                 }
@@ -331,6 +366,9 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
                 log!("Invalid move.");
             },
         }
+
+        // log!("input_counter before sub:", input_counter.load(Ordering::SeqCst));
+        input_counter.fetch_sub(1, Ordering::SeqCst);
     }
 }
 
@@ -346,12 +384,14 @@ fn content() -> Html {
     // Attach a keydown event listener to the document.
     use_effect(move || {
         let (keydown_tx, keydown_rx) = mpsc::unbounded_channel();
-        spawn_local(process_keydown_messages(game_state_for_move_processor, keydown_rx));
-        let counter = Arc::new(AtomicUsize::new(0));
+        let input_counter = Arc::new(AtomicU16::new(0));
+
+        spawn_local(process_keydown_messages(game_state_for_move_processor, keydown_rx, input_counter.clone()));
 
         let document = gloo::utils::document();
         let listener = EventListener::new(&document, "keydown", move |event| {
             let key_code = event.dyn_ref::<web_sys::KeyboardEvent>().unwrap_throw().code();
+            input_counter.fetch_add(1, Ordering::SeqCst);
             keydown_tx.send(key_code).expect("Sending key_code failed.");
         });
 
@@ -360,56 +400,6 @@ fn content() -> Html {
         || drop(listener)
     });
 
-    // Add event listener for sliding animation end - update inner html value.
-    // Logic for this animation can be found in fn slide_tile().
-    use_effect(move || {
-        let body = gloo::utils::body();
-        let merge_expand = Closure::wrap(Box::new(move |event: AnimationEvent| {
-            if event.animation_name() == "sliding" {
-                if event.type_() == "animationcancel" {
-                    log!(format!("{} was canceled.", event.animation_name()));
-                } else if event.type_() == "animationend" {
-                    log!("{} was finished.", event.animation_name());
-                }
-                let event_target = event.target().expect("No event target found.");
-                let html_tile = event_target.dyn_ref::<HtmlElement>().unwrap();
-
-                match html_tile.style().get_property_value("--merged_value") {
-                    Ok(merged_value) => {
-                        if !merged_value.is_empty() {
-                            // let new_top_offset = html_tile.style().get_property_value("--new_top").unwrap();
-                            // let new_left_offset = html_tile.style().get_property_value("--new_left").unwrap();
-
-                            // html_tile.style().set_property("top", &new_top_offset).unwrap();
-                            // html_tile.style().set_property("left", &new_left_offset).unwrap();
-
-                            // let parent_node = html_tile.parent_node().unwrap();
-                            // parent_node.remove_child(&html_tile).unwrap();
-                            // parent_node.append_child(&html_tile).unwrap();
-
-                            // let expanding_animation = format!("expand-merge {}ms ease-in-out", EXPAND_DURATION);
-                            // html_tile.style().set_property("animation", &expanding_animation).unwrap();
-
-                            // Update font-size to prevent overflow before setting the new Tile value.
-                        }
-                    },
-                    Err(_) => (),
-                }
-            }
-        }) as Box<dyn FnMut(AnimationEvent)>);
-
-        // body.add_event_listener_with_callback("animationend", merge_expand.as_ref().unchecked_ref()).unwrap();
-        // body.add_event_listener_with_callback("animationcancel", merge_expand.as_ref().unchecked_ref()).unwrap();
-
-        || {
-            // Must remove the callback or else memory leak will occur each time New Game is clicked.
-            let body = gloo::utils::body();
-            // body.remove_event_listener_with_callback("animationend", merge_expand.as_ref().unchecked_ref()).unwrap();
-            // body.remove_event_listener_with_callback("animationcancel", merge_expand.as_ref().unchecked_ref()).unwrap();
-            drop(merge_expand)
-        }
-    });
-    
     // use_state() hook is used to trigger a re-render whenever the `New Game` button is clicked.
     // The value is used as a key to each Tile component in order to its `expand-init` animation.
     let new_game = use_state(|| 0);
