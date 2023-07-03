@@ -1,0 +1,166 @@
+* {
+    margin: 0;
+    padding: 0;
+    font-family: "Andale Mono", AndaleMono, monospace;
+}
+
+html, body {
+    margin-left: auto;
+    margin-right: auto;
+    width: 500px;
+    height: 100%;
+    font-size: 1.0rem;
+    background-image: linear-gradient(var(--gradient_top), var(--gradient_bot));
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+}
+
+body > * {
+    justify-content: center;
+}
+
+div.header {
+    display: inline-block;
+    height: 75px;
+    color: var(--header_text);
+}
+
+div.content {
+    align-items: center;
+}
+
+div.metadata {
+    height: 80px;
+    position: relative;
+}
+
+div.metadata > * {
+    position: absolute;
+    bottom: 15px;
+    border: solid 1px var(--button_border);
+    border-radius: 5px;
+    background-color: var(--button_background);
+    height: 35px;
+    width: 130px;
+    font-size: 1.15em;
+    color: var(--button_text);
+}
+
+.score {
+    left: 0px;
+    text-align: center;
+    line-height: 35px;
+}
+
+div.metadata > .new-game {
+    right: 0px;
+    width: 125px;
+}
+
+.new-game:hover {
+    background-color: var(--button_hover);
+}
+
+div.board-container {
+    position: relative;
+    height: 560px;
+}
+
+div.footer {
+    height: 75px;
+    color: var(--footer_text);
+}
+
+table {
+    border-spacing: 4px;
+    border-radius: 10px;
+    background-color: var(--table_background);
+    margin: auto;
+}
+
+.cell {
+    border-radius: 5px;
+    width: 120px;
+    height: 120px;
+    background-color: var(--cell_background);
+}
+
+.module h2 {
+  font-size: 1em;
+  container-name: sidebar
+}
+
+@container sidebar (min-width: 700px) {
+  .module h2 {
+    font-size: 2em;
+  }
+}
+
+.tile {
+    font-family: Verdana, Geneva, sans-serif;
+    text-align: center;
+    line-height: 120px;
+    font-size: 3.0em;
+    position: absolute;
+    top: var(--top);
+    left: var(--left);
+    background-color: var(--background_color);
+    color: var(--text_color);
+    animation: expand-init 0.25s ease-in-out;
+}
+
+@keyframes expand-init {
+  0% {
+    transform: scale(0);
+    transform-origin: center;
+  }
+  100% {
+    transform: scale(1);
+    transform-origin: center;
+  }
+}
+
+@keyframes expand-merge {
+  0% {
+    transform: scale(1);
+    transform-origin: center;
+  }
+  50% {
+    transform: scale(1.20);
+    transform-origin: center;
+  }
+  100% {
+    transform: scale(1);
+    transform-origin: center;
+  }
+}
+
+.typed {
+    overflow: hidden;
+    white-space: nowrap;
+    border-right: 2px solid;
+    border-right-color: var(--blinking_cursor);
+    width: 0;
+    animation: typing 1.5s steps(30, end) forwards, blinking 1.25s steps(2) infinite;
+}
+
+@keyframes typing {
+  from { width: 0 }
+  to { width: 100% }
+}
+
+@keyframes blinking {
+  0% {border-right-color: transparent}
+}
+
+@keyframes sliding {
+    0% {
+        left: var(--current_left);
+        top: var(--current_top);
+    }
+    100% {
+        left: var(--new_left);
+        top: var(--new_top);
+    }
+}
+
