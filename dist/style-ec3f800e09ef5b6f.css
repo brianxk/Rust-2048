@@ -104,6 +104,17 @@ table {
     position: absolute;
 }
 
+@keyframes sliding {
+    0% {
+        left: var(--current_left);
+        top: var(--current_top);
+    }
+    100% {
+        top: var(--new_top);
+        left: var(--new_left);
+    }
+}
+
 @keyframes expand-init {
   0% {
     transform: scale(0);
@@ -130,6 +141,11 @@ table {
   }
 }
 
+.gameover {
+    position: relative;
+    height: 560px;
+}
+
 .typed {
     overflow: hidden;
     white-space: nowrap;
@@ -146,16 +162,5 @@ table {
 
 @keyframes blinking {
   0% {border-right-color: transparent}
-}
-
-@keyframes sliding {
-    0% {
-        left: var(--current_left);
-        top: var(--current_top);
-    }
-    100% {
-        top: var(--new_top);
-        left: var(--new_left);
-    }
 }
 

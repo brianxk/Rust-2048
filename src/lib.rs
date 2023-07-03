@@ -1,8 +1,6 @@
 use rand::{distributions::WeightedIndex, prelude::Distribution, seq::SliceRandom};
 use std::collections::LinkedList;
 use hex_color::HexColor;
-use gloo_console::log;
-
 
 pub const BOARD_DIMENSION: usize = 4;
 const NUM_TILES: usize = BOARD_DIMENSION * BOARD_DIMENSION;
@@ -50,7 +48,7 @@ impl std::fmt::Display for Tile {
 }
 
 /// Struct that holds the choices for new tiles and the probability with which they will appear.
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 struct NewTileParams {
     tile_choices: [u32; 2],
     tile_weights: [u8; 2],
@@ -110,7 +108,7 @@ pub enum InputResult<'a> {
     Err(InvalidMove),
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub struct Game {
     pub board: [[Option<Tile>; BOARD_DIMENSION]; BOARD_DIMENSION],
     new_tile_params: NewTileParams,
@@ -272,6 +270,38 @@ impl Game {
                 }
             }
         }
+    }
+
+    fn clone_board(original_board: &[[Option<Tile>; BOARD_DIMENSION]; BOARD_DIMENSION]) -> [[Option<Tile>; BOARD_DIMENSION]; BOARD_DIMENSION] {
+        const EMPTY_TILE: Option<Tile> = None;
+        const EMPTY_ROW: [Option<Tile>; BOARD_DIMENSION] = [EMPTY_TILE; BOARD_DIMENSION];
+
+        let mut cloned_board = [EMPTY_ROW; BOARD_DIMENSION];
+
+        for i in 0..BOARD_DIMENSION {
+            cloned_board[i] = original_board[i].clone();
+        }
+
+        cloned_board
+    }
+
+    /// Returns true if the game is over. The game is over if no more moves are possible. This will
+    /// be tested by calling the `receive_input` function in all 4 directions on the current board
+    /// state. Although acquiring the 2048 Tile is the win condition, this has no effect on
+    /// gameplay and thus is not checked here. The frontend will be responsible for checking if
+    /// the 2048 Tile has been acquired and for notifying the player.
+    pub fn game_over(&self) -> bool {
+        let directions = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
+
+        for direction in directions {
+            let mut current_game = self.clone();
+
+            if let InputResult::Ok(_, _) = current_game.receive_input(direction) {
+                return false
+            }
+        }
+
+        true
     }
 
     /// Receives the user's input and slides tiles in the specified direction.

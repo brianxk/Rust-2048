@@ -23,7 +23,7 @@ const COLORS: Colors = Colors::new();
 // Durations in milliseconds.
 const DEFAULT_SLIDE_DURATION: u64 = 100;
 const DEFAULT_EXPAND_DURATION: u64 = 75;
-const DEFAULT_SLEEP_DURATION: u64 = 10;
+const DEFAULT_SLEEP_DURATION: u64 = 5;
 
 // Globally mutable variables. If the number of player moves in the queue is greater than 1, all
 // animation durations will be set to 0. Otherwise the original values will be restored.
@@ -358,6 +358,8 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
                         // Wait for merge-expand animation to complete.
                         // sleep(Duration::from_millis(*CURRENT_EXPAND_DURATION.lock().unwrap())).await;
                         await_animations("expand-merge".to_string()).await;
+
+                        log!("Game over:", game_state_mut.game_over());
                     },
                     Err(_) => log!("NodeList could not be found."),
                 }
@@ -492,6 +494,22 @@ struct ScoreProps {
 fn score(props: &ScoreProps) -> Html {
     html! {
         <div class="score">{props.score}</div>
+    }
+}
+
+#[function_component(WinLayer)]
+fn win_layer() -> Html {
+    html! {
+
+    }
+}
+
+#[function_component(LossLayer)]
+fn loss_layer() -> Html {
+    let style_args = format!("");
+
+    html! {
+        <div class="gameover" style={style_args}/>
     }
 }
 
