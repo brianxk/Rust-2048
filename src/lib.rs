@@ -1,6 +1,8 @@
 use rand::{distributions::WeightedIndex, prelude::Distribution, seq::SliceRandom};
 use std::collections::LinkedList;
 use hex_color::HexColor;
+use gloo_console::log;
+
 
 pub const BOARD_DIMENSION: usize = 4;
 const NUM_TILES: usize = BOARD_DIMENSION * BOARD_DIMENSION;
@@ -89,18 +91,14 @@ pub struct Colors {
 impl Colors {
     pub const fn new() -> Self {
         Colors {
-            background_dark: "#2B2A4C",
-            background_light: "#2B2A4C",
-            text_dark: "#09080f",
-            text_light: "#EA906C",
-            button: "#BCBCCC",
-            button_hover: "#F0F0F0",
-            board: "#EA906C",
-            cell: "#BCBCCC",
-            // button: "#F0F0F0",
-            // button_hover: "#bcbccc",
-            // board: "#F0F0F0",
-            // cell: "#bcbccc",
+            background_dark: "#072931",
+            background_light: "#072931",
+            text_dark: "#022244",
+            text_light: "#f2ba0d",
+            button: "#92cdb9",
+            button_hover: "#b4ddcf",
+            board: "#022244",
+            cell: "#92cdb9",
         }
     }
 }
@@ -156,6 +154,9 @@ impl Game {
         } else {
             second_tile_value = game.generate_tile_value();
         }
+
+        // let first_tile_value = 16384;
+        // let second_tile_value = 131072;
 
         let first_tile_pos = game.get_random_free_slot().expect("New game board, should not panic.");
         let first_tile_id = game.get_id().unwrap();
@@ -448,7 +449,7 @@ impl Game {
         merged_tile.value *= 2;
         self.score += merged_tile.value;
 
-        merged_tile.background_color = self.get_tile_colors(merged_tile.value).0;
+        (merged_tile.background_color, merged_tile.text_color) = self.get_tile_colors(merged_tile.value);
     }
 
     /// Receives a tile, the new row and col indexes, and updates both the tile's internal row and
@@ -494,7 +495,27 @@ impl Game {
         let interpolated_color = interpolate_hex_colors(&base_color, &other_color, interpolation_offset / num_interpolation_steps as f32);
         let tile_background = interpolated_color.to_string();
 
-        (tile_background.to_string(), "darkblue".to_string())
+        let relative_luminance = 0.2126 * interpolated_color.r as f32 +
+                                 0.7152 * interpolated_color.g as f32 +
+                                 0.0722 * interpolated_color.b as f32;
+
+        let relative_luminance = relative_luminance / 255.0;
+
+        let tile_text;
+        let colors = Colors::new();
+
+        // log!("Tile value:", tile_value);
+        // log!("Relative luminance:", relative_luminance);
+        
+        if relative_luminance <= 0.35 {
+            tile_text = colors.text_light;
+            // log!("Light text.")
+        } else {
+            tile_text = colors.text_dark;
+            // log!("Dark text.")
+        }
+
+        (tile_background.to_string(), tile_text.to_string())
     }
 }
 
