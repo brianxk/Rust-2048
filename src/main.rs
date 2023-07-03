@@ -4,12 +4,12 @@ use rust_2048::*;
 use gloo_console::log;
 use gloo::events::EventListener;
 use wasm_bindgen::{JsCast, UnwrapThrowExt};
-use web_sys::{HtmlElement, window, CssAnimation, AnimationPlayState, Element};
+use web_sys::{HtmlElement, window, CssAnimation, AnimationPlayState};
 use std::rc::Rc;
 use std::cell::RefCell;
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::closure::Closure;
-use wasm_bindgen_futures::{spawn_local, JsFuture};
+use wasm_bindgen_futures::spawn_local;
 use tokio::sync::mpsc;
 use yew::platform::time::sleep;
 use core::time::Duration;
@@ -127,12 +127,11 @@ async fn await_animations(animation_name: String, sleep_duration: u64) {
                     }
                 };
 
-                play_state = animation.expect(&format!("ID not found: {}", c_id)).play_state();
-                // play_state = animation.unwrap().play_state();
-                // play_state = match animation {
-                    // Some(a) => a.play_state(),
-                    // None => break
-                // }
+                // play_state = animation.expect(&format!("ID not found: {}", c_id)).play_state();
+                play_state = match animation {
+                    Some(a) => a.play_state(),
+                    None => break
+                }
             }
 
             log!("play_state after:", play_state);
@@ -171,6 +170,53 @@ fn add_tile(game_tile: &rust_2048::Tile) {
     board_container.append_child(&html_tile).unwrap();
 }
 
+/// Removes and re-appends html_tile to ensure animations trigger each time rather than only once.
+fn re_append(html_tile: &HtmlElement) {
+    let parent_node = html_tile.parent_node().unwrap();
+    parent_node.remove_child(&html_tile).unwrap();
+    parent_node.append_child(&html_tile).unwrap();
+}
+
+fn merge_tiles() {
+    let document = gloo::utils::document();
+
+    match document.query_selector_all("[class='tile cell']") {
+        Ok(node_list) => {
+            for i in 0..node_list.length() {
+                let node = node_list.get(i).unwrap();
+                let html_tile = node.dyn_ref::<HtmlElement>().unwrap();
+
+                if let Ok(merged_value) = html_tile.style().get_property_value("--merged_value") {
+                    if !merged_value.is_empty() {
+                        // Adjust font size and number value.
+                        html_tile.style().set_property("font-size", &compute_font_size(&merged_value)).unwrap();
+                        html_tile.set_inner_html(&merged_value);
+
+                        // Obtain and set appropriate Tile colors.
+                        let new_background_color = html_tile.style().get_property_value("--background_color").unwrap();
+                        let new_text_color = html_tile.style().get_property_value("--text_color").unwrap();
+
+                        html_tile.style().set_property("background-color", &new_background_color).unwrap();
+                        html_tile.style().set_property("color", &new_text_color).unwrap();
+
+                        // Reset all of these properties.
+                        html_tile.style().set_property("--merged_value", "").expect("Failed to reset --merged_value to empty.");
+                        html_tile.style().set_property("--background_color", "").unwrap();
+                        html_tile.style().set_property("--text_color", "").unwrap();
+
+                        // Initiate merging expand animation.
+                        let expanding_animation = format!("expand-merge {}ms ease-in-out", EXPAND_DURATION);
+                        html_tile.style().set_property("animation", &expanding_animation).unwrap();
+                        re_append(html_tile);
+                    }
+                }
+
+            }
+        },
+        Err(_) => log!("NodeList could not be found."),
+    } 
+}
+
 fn slide_tile(html_tile: &HtmlElement, game_tile: &rust_2048::Tile) {
     // Obtain current top and left offsets.
     let computed_style = window().unwrap().get_computed_style(&html_tile).unwrap().unwrap();
@@ -190,30 +236,24 @@ fn slide_tile(html_tile: &HtmlElement, game_tile: &rust_2048::Tile) {
     html_tile.style().set_property("--new_left", &new_left_offset).unwrap();
 
     let sliding_animation = format!("sliding {}ms ease-in-out forwards", SLIDE_DURATION);
-    let expanding_animation = format!("expand-merge {}ms ease-in-out {}ms", EXPAND_DURATION, SLIDE_DURATION);
 
-    let composite_animation;
     if let Some(_) = &game_tile.merged {
-        // These properties must be set for the body event listener that listens for the sliding
-        // animation to complete. Once it has completed, the event listener will use these
-        // properties to set the new value and colors.
+        // Tiles with the --merged_value property set will be marked for the merging animation
+        // later, along with having their value and colors updated as well.
         html_tile.style().set_property("--merged_value", &game_tile.value.to_string()).unwrap();
         html_tile.style().set_property("--background_color", &game_tile.background_color).unwrap();
         html_tile.style().set_property("--text_color", &game_tile.text_color).unwrap();
-
-        composite_animation = format!("{}, {}", sliding_animation, expanding_animation);
-    } else {
-        composite_animation = format!("{}", sliding_animation);
     }
 
     html_tile.style().set_property("animation", &sliding_animation).unwrap();
+    re_append(html_tile);
 
-    // Remove and re-append html_tile to ensure animations trigger each time rather than only once.
-    let parent_node = html_tile.parent_node().unwrap();
-    parent_node.remove_child(&html_tile).unwrap();
-    parent_node.append_child(&html_tile).unwrap();
+    html_tile.style().set_property("top", &new_top_offset).unwrap();
+    html_tile.style().set_property("left", &new_left_offset).unwrap();
 }
 
+/// Calls slide_tile() in a loop to move each tile into position. Returns a Vec containing the IDs
+/// of every Tile that needs to be deleted from the frontend.
 fn slide_tiles(node_list: web_sys::NodeList, tiles: &Vec<&rust_2048::Tile>) -> Vec<usize> {
     let document = gloo::utils::document();
     let mut removed_tile_ids = Vec::new();
@@ -263,14 +303,10 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
 
                         // Wait for slide animation to complete.
                         // sleep(Duration::from_millis(SLIDE_DURATION)).await;
-                        await_animations("sliding".to_string(), 20).await;
+                        let sleep_duration = 20;
+                        await_animations("sliding".to_string(), sleep_duration).await;
+                        // Consider removing animations once they are complete if this approach does not work.
                         
-                        // let mut tiles_merged = false;
-
-                        // if !removed_tile_ids.is_empty() {
-                        //     tiles_merged = true;
-                        // }
-
                         // Removing marked tiles, adding new tile, and updating score 
                         // should occur simultaneously with merge-expand animation.
                         for id in removed_tile_ids {
@@ -283,10 +319,10 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
                         // Update the score.
                         update_score(game_state_mut.score);
 
+                        merge_tiles();
+
                         // Wait for merge-expand animation to complete.
-                        // if tiles_merged {
-                            // sleep(Duration::from_millis(EXPAND_DURATION)).await;
-                        // }
+                        await_animations("expand-merge".to_string(), sleep_duration).await;
                     },
                     Err(_) => log!("NodeList could not be found."),
                 }
@@ -355,20 +391,6 @@ fn content() -> Html {
                             // html_tile.style().set_property("animation", &expanding_animation).unwrap();
 
                             // Update font-size to prevent overflow before setting the new Tile value.
-                            html_tile.style().set_property("font-size", &compute_font_size(&merged_value)).unwrap();
-                            html_tile.set_inner_html(&merged_value);
-
-                            // Obtain and set appropriate Tile colors.
-                            let new_background_color = html_tile.style().get_property_value("--background_color").unwrap();
-                            let new_text_color = html_tile.style().get_property_value("--text_color").unwrap();
-
-                            html_tile.style().set_property("background-color", &new_background_color).unwrap();
-                            html_tile.style().set_property("color", &new_text_color).unwrap();
-
-                            // Reset all of these properties.
-                            html_tile.style().set_property("--merged_value", "").expect("Failed to reset --merged_value to empty.");
-                            html_tile.style().set_property("--background_color", "").unwrap();
-                            html_tile.style().set_property("--text_color", "").unwrap();
                         }
                     },
                     Err(_) => (),
@@ -376,14 +398,6 @@ fn content() -> Html {
             }
         }) as Box<dyn FnMut(AnimationEvent)>);
 
-        // If the user enters more keys before an animation has completed, animationend will never
-        // fire and the merging logic above will not execute until the animation from the user's 
-        // final keystroke has completed.
-        //
-        // For instance, a group of sequential 2-Tiles will appear to be moving across the screen
-        // but only change into their merged versions at the end of the animations. To prevent
-        // this, the animationcancel event can be used to ensure the merging logic is "fast
-        // forwarded" whenever an animation is canceled prematurely.
         // body.add_event_listener_with_callback("animationend", merge_expand.as_ref().unchecked_ref()).unwrap();
         // body.add_event_listener_with_callback("animationcancel", merge_expand.as_ref().unchecked_ref()).unwrap();
 
