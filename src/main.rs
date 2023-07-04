@@ -90,15 +90,15 @@ fn tile(props: &TileProps) -> Html {
     }
 }
 
-fn set_animation_durations(input_counter: Arc<AtomicU16>, threshold: u16) {
+fn set_animation_durations(input_counter: Arc<AtomicU16>, threshold: u16, duration: u64) {
     if input_counter.load(Ordering::SeqCst) >  threshold {
         *CURRENT_SLIDE_DURATION.lock().unwrap() = 0;
         *CURRENT_EXPAND_DURATION.lock().unwrap() = 0;
         // *CURRENT_SLEEP_DURATION.lock().unwrap() = 20;
     } else {
-        *CURRENT_SLIDE_DURATION.lock().unwrap() = DEFAULT_SLIDE_DURATION;
-        *CURRENT_EXPAND_DURATION.lock().unwrap() = DEFAULT_SLIDE_DURATION;
-        // *CURRENT_SLEEP_DURATION.lock().unwrap() = DEFAULT_SLIDE_DURATION;
+        *CURRENT_SLIDE_DURATION.lock().unwrap() = duration;
+        *CURRENT_EXPAND_DURATION.lock().unwrap() = duration;
+        // *CURRENT_SLEEP_DURATION.lock().unwrap() = duration;
     }
 }
 
@@ -307,6 +307,8 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
     let game_state_mut = game_state.clone();
     let mut game_state_mut = game_state_mut.borrow_mut();
 
+    let mut moves_pending = false;
+
     while let Some(key_code) = keydown_rx.recv().await {
         match game_state_mut.receive_input(&key_code) {
             InputResult::Ok(new_tile_id, tiles) => {
@@ -314,7 +316,13 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
                 
                 match document.query_selector_all("[class='tile cell']") {
                     Ok(node_list) => {
-                        set_animation_durations(input_counter.clone(), 1);
+                        let mut slide_duration = DEFAULT_SLIDE_DURATION;
+
+                        if moves_pending {
+                            slide_duration = DEFAULT_SLIDE_DURATION / 2;
+                        }
+
+                        set_animation_durations(input_counter.clone(), 1, slide_duration);
                         let removed_tile_ids = slide_tiles(node_list, &tiles);
                         await_animations("sliding".to_string()).await;
                         
@@ -332,9 +340,15 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
 
                         input_counter.fetch_sub(1, Ordering::SeqCst);
 
-                        set_animation_durations(input_counter.clone(), 0);
+                        set_animation_durations(input_counter.clone(), 0, DEFAULT_EXPAND_DURATION);
                         merge_tiles();
                         await_animations("expand-merge".to_string()).await;
+
+                        if input_counter.load(Ordering::SeqCst) > 0 {
+                            moves_pending = true;
+                        } else {
+                            moves_pending = false;
+                        }
                     },
                     Err(_) => log!("NodeList could not be found."),
                 }
