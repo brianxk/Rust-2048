@@ -3,7 +3,7 @@ use yew::prelude::*;
 use rust_2048::*;
 use gloo_console::log;
 use gloo::events::EventListener;
-use wasm_bindgen::{JsCast, UnwrapThrowExt};
+use wasm_bindgen::{JsCast, UnwrapThrowExt, closure::Closure};
 use web_sys::{HtmlElement, window, CssAnimation, AnimationPlayState};
 use std::rc::Rc;
 use std::cell::RefCell;
@@ -21,9 +21,9 @@ const TILE_DIMENSION: u16 = 120;
 const COLORS: Colors = Colors::new();
 
 // Durations in milliseconds.
-const DEFAULT_SLIDE_DURATION: u64 = 125;
-const DEFAULT_EXPAND_DURATION: u64 = 125;
-const DEFAULT_SLEEP_DURATION: u64 = 5;
+const DEFAULT_SLIDE_DURATION: u64 = 120;
+const DEFAULT_EXPAND_DURATION: u64 = 120;
+const DEFAULT_SLEEP_DURATION: u64 = 1;
 
 // Globally mutable variables. If the number of player moves in the queue is greater than 1, all
 // animation durations will be set to 0. Otherwise the original values will be restored.
@@ -90,16 +90,20 @@ fn tile(props: &TileProps) -> Html {
     }
 }
 
-fn set_animation_durations(input_counter: Arc<AtomicU16>, threshold: u16, duration: u64) {
+fn set_animation_durations(input_counter: Arc<AtomicU16>, threshold: u16, duration: u64) -> (u64, u64) {
+    log!("input_counter:", input_counter.load(Ordering::SeqCst));
+
     if input_counter.load(Ordering::SeqCst) >  threshold {
         *CURRENT_SLIDE_DURATION.lock().unwrap() = 0;
         *CURRENT_EXPAND_DURATION.lock().unwrap() = 0;
-        *CURRENT_SLEEP_DURATION.lock().unwrap() = 20;
+        // *CURRENT_SLEEP_DURATION.lock().unwrap() = 20;
     } else {
         *CURRENT_SLIDE_DURATION.lock().unwrap() = duration;
         *CURRENT_EXPAND_DURATION.lock().unwrap() = duration;
-        *CURRENT_SLEEP_DURATION.lock().unwrap() = duration;
+        // *CURRENT_SLEEP_DURATION.lock().unwrap() = duration;
     }
+
+    (*CURRENT_SLIDE_DURATION.lock().unwrap(), *CURRENT_EXPAND_DURATION.lock().unwrap())
 }
 
 fn remove_tile(id: usize) {
@@ -205,26 +209,8 @@ fn merge_tiles() {
 
                 if let Ok(merged_value) = html_tile.style().get_property_value("--merged_value") {
                     if !merged_value.is_empty() {
-                        // Adjust font size and number value.
-                        html_tile.style().set_property("font-size", &compute_font_size(&merged_value)).unwrap();
-                        html_tile.set_inner_html(&merged_value);
-
-                        // Obtain and set appropriate Tile colors.
-                        let new_background_color = html_tile.style().get_property_value("--background_color").unwrap();
-                        let new_text_color = html_tile.style().get_property_value("--text_color").unwrap();
-
-                        html_tile.style().set_property("background-color", &new_background_color).unwrap();
-                        html_tile.style().set_property("color", &new_text_color).unwrap();
-
-                        // Reset all of these properties.
-                        html_tile.style().set_property("--merged_value", "").expect("Failed to reset --merged_value to empty.");
-                        html_tile.style().set_property("--background_color", "").unwrap();
-                        html_tile.style().set_property("--text_color", "").unwrap();
-
-                        // Initiate merging expand animation.
-                        let expanding_animation = format!("expand-merge {}ms ease-in-out", CURRENT_EXPAND_DURATION.lock().unwrap());
-                        html_tile.style().set_property("animation", &expanding_animation).unwrap();
-                        re_append(html_tile);
+                        update_tile(&html_tile, &merged_value);
+                        expand_tile(&html_tile);
                     }
                 }
 
@@ -232,6 +218,30 @@ fn merge_tiles() {
         },
         Err(_) => log!("NodeList could not be found."),
     } 
+}
+
+fn update_tile(html_tile: &HtmlElement, merged_value: &String) {
+    // Adjust font size and number value.
+    html_tile.style().set_property("font-size", &compute_font_size(&merged_value)).unwrap();
+    html_tile.set_inner_html(&merged_value);
+
+    // Obtain and set appropriate Tile colors.
+    let new_background_color = html_tile.style().get_property_value("--background_color").unwrap();
+    let new_text_color = html_tile.style().get_property_value("--text_color").unwrap();
+
+    html_tile.style().set_property("background-color", &new_background_color).unwrap();
+    html_tile.style().set_property("color", &new_text_color).unwrap();
+
+    // Reset all of these properties.
+    html_tile.style().set_property("--merged_value", "").expect("Failed to reset --merged_value to empty.");
+    html_tile.style().set_property("--background_color", "").unwrap();
+    html_tile.style().set_property("--text_color", "").unwrap();
+}
+
+fn expand_tile(html_tile: &HtmlElement) {
+    let expanding_animation = format!("expand-merge {}ms ease-in-out", CURRENT_EXPAND_DURATION.lock().unwrap());
+    html_tile.style().set_property("animation", &expanding_animation).unwrap();
+    re_append(html_tile);
 }
 
 fn slide_tile(html_tile: &HtmlElement, game_tile: &rust_2048::Tile) {
@@ -252,7 +262,7 @@ fn slide_tile(html_tile: &HtmlElement, game_tile: &rust_2048::Tile) {
     html_tile.style().set_property("--new_top", &new_top_offset).unwrap();
     html_tile.style().set_property("--new_left", &new_left_offset).unwrap();
 
-    let sliding_animation = format!("sliding {}ms ease-in-out forwards", CURRENT_SLIDE_DURATION.lock().unwrap());
+    let sliding_animation = format!("sliding {}ms ease-in forwards", CURRENT_SLIDE_DURATION.lock().unwrap());
 
     if let Some(_) = &game_tile.merged {
         // Tiles with the --merged_value property set will be marked for the merging animation
@@ -307,8 +317,6 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
     let game_state_mut = game_state.clone();
     let mut game_state_mut = game_state_mut.borrow_mut();
 
-    let mut moves_pending = false;
-
     while let Some(key_code) = keydown_rx.recv().await {
         match game_state_mut.receive_input(&key_code) {
             InputResult::Ok(new_tile_id, tiles) => {
@@ -317,15 +325,11 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
                 match document.query_selector_all("[class='tile cell']") {
                     Ok(node_list) => {
                         log!("Sliding");
-                        let mut slide_duration = DEFAULT_SLIDE_DURATION;
-
-                        if moves_pending {
-                            slide_duration = DEFAULT_SLIDE_DURATION / (input_counter.load(Ordering::SeqCst) as u64);
-                        }
-
-                        set_animation_durations(input_counter.clone(), 1, slide_duration);
+                        let (slide_duration, _) = set_animation_durations(input_counter.clone(), 2, DEFAULT_SLIDE_DURATION);
                         let removed_tile_ids = slide_tiles(node_list, &tiles);
-                        await_animations("sliding".to_string()).await;
+                        
+                        sleep(Duration::from_millis(slide_duration)).await;
+                        // await_animations("sliding".to_string()).await;
                         
                         // Removing marked tiles, adding new tile, and updating score 
                         // should occur simultaneously with merge-expand animation.
@@ -333,25 +337,17 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
                             remove_tile(id);
                         }
 
-                        log!("Decrementing input_counter");
                         input_counter.fetch_sub(1, Ordering::SeqCst);
+                        let (_, expand_duration) = set_animation_durations(input_counter.clone(), 0, DEFAULT_EXPAND_DURATION);
 
-                        // let expand_duration = DEFAULT_EXPAND_DURATION;
-                        set_animation_durations(input_counter.clone(), 0, DEFAULT_EXPAND_DURATION);
-
-                        log!("Expanding");
                         // Render the new Tile.
                         add_tile(get_tile_by_id(&tiles, new_tile_id).expect("Failed to find new Tile."));
 
                         merge_tiles();
-                        await_animations("expand-merge".to_string()).await;
+                        // await_animations("expand-merge".to_string()).await;
 
-                        if input_counter.load(Ordering::SeqCst) > 0 {
-                            moves_pending = true;
-                        } else {
-                            moves_pending = false;
-                        }
-                        
+                        sleep(Duration::from_millis(expand_duration)).await;
+
                         // Update the score.
                         update_score(game_state_mut.score);
                     },
@@ -359,7 +355,6 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
                 }
             },
             InputResult::Err(InvalidMove) => {
-                log!("Decrementing input_counter");
                 input_counter.fetch_sub(1, Ordering::SeqCst);
             },
         }
@@ -392,6 +387,42 @@ fn content() -> Html {
         // Called when the component is unmounted.  The closure has to hold on to `listener`, because if it gets
         // dropped, `gloo` detaches it from the DOM. So it's important to do _something_, even if it's just dropping it.
         || drop(listener)
+    });
+
+    // Add event listener for sliding animation end - update inner html value.
+    // Logic for this animation can be found in fn slide_tile().
+    use_effect(move || {
+        let body = gloo::utils::body();
+        let merge_expand = Closure::wrap(Box::new(move |event: AnimationEvent| {
+            if event.animation_name() == "sliding" {
+                if event.type_() == "animationcancel" {
+                    log!(format!("{} was canceled.", event.animation_name()));
+                } else if event.type_() == "animationend" {
+                    log!("{} was finished.", event.animation_name());
+                }
+                let event_target = event.target().expect("No event target found.");
+                let html_tile = event_target.dyn_ref::<HtmlElement>().unwrap();
+
+                match html_tile.style().get_property_value("--merged_value") {
+                    Ok(merged_value) => {
+                        if !merged_value.is_empty() {
+                        }
+                    },
+                    Err(_) => (),
+                }
+            }
+        }) as Box<dyn FnMut(AnimationEvent)>);
+        
+        // body.add_event_listener_with_callback("animationend", merge_expand.as_ref().unchecked_ref()).unwrap();
+        // body.add_event_listener_with_callback("animationcancel", merge_expand.as_ref().unchecked_ref()).unwrap();
+
+        || {
+            // Must remove the callback or else memory leak will occur each time New Game is clicked.
+            let body = gloo::utils::body();
+            // body.remove_event_listener_with_callback("animationend", merge_expand.as_ref().unchecked_ref()).unwrap();
+            // body.remove_event_listener_with_callback("animationcancel", merge_expand.as_ref().unchecked_ref()).unwrap();
+            drop(merge_expand)
+        }
     });
 
     // use_state() hook is used to trigger a re-render whenever the `New Game` button is clicked.
