@@ -91,15 +91,15 @@ fn tile(props: &TileProps) -> Html {
 }
 
 fn set_animation_durations(input_counter: Arc<AtomicU16>, threshold: u16, duration: u64) {
-    // if input_counter.load(Ordering::SeqCst) >  threshold {
-    //     *CURRENT_SLIDE_DURATION.lock().unwrap() = 0;
-    //     *CURRENT_EXPAND_DURATION.lock().unwrap() = 0;
-    //     // *CURRENT_SLEEP_DURATION.lock().unwrap() = 20;
-    // } else {
+    if input_counter.load(Ordering::SeqCst) >  threshold {
+        *CURRENT_SLIDE_DURATION.lock().unwrap() = 0;
+        *CURRENT_EXPAND_DURATION.lock().unwrap() = 0;
+        *CURRENT_SLEEP_DURATION.lock().unwrap() = 20;
+    } else {
         *CURRENT_SLIDE_DURATION.lock().unwrap() = duration;
         *CURRENT_EXPAND_DURATION.lock().unwrap() = duration;
         *CURRENT_SLEEP_DURATION.lock().unwrap() = duration;
-    // }
+    }
 }
 
 fn remove_tile(id: usize) {
