@@ -22,7 +22,7 @@ const COLORS: Colors = Colors::new();
 
 // Durations in milliseconds.
 const DEFAULT_SLIDE_DURATION: u64 = 120;
-const DEFAULT_EXPAND_DURATION: u64 = 120;
+const DEFAULT_EXPAND_DURATION: u64 = 110;
 const DEFAULT_SLEEP_DURATION: u64 = 1;
 
 // Globally mutable variables. If the number of player moves in the queue is greater than 1, all
@@ -91,17 +91,27 @@ fn tile(props: &TileProps) -> Html {
 }
 
 fn set_animation_durations(input_counter: Arc<AtomicU16>, threshold: u16, duration: u64) -> (u64, u64) {
-    log!("input_counter:", input_counter.load(Ordering::SeqCst));
+    let pending_moves = input_counter.load(Ordering::SeqCst);
+    let divisor: u64;
 
-    if input_counter.load(Ordering::SeqCst) >  threshold {
-        *CURRENT_SLIDE_DURATION.lock().unwrap() = 0;
-        *CURRENT_EXPAND_DURATION.lock().unwrap() = 0;
-        // *CURRENT_SLEEP_DURATION.lock().unwrap() = 20;
+    if pending_moves > threshold {
+        divisor = (pending_moves + 1) as u64;
     } else {
-        *CURRENT_SLIDE_DURATION.lock().unwrap() = duration;
-        *CURRENT_EXPAND_DURATION.lock().unwrap() = duration;
-        // *CURRENT_SLEEP_DURATION.lock().unwrap() = duration;
+        divisor = 1
     }
+
+    *CURRENT_SLIDE_DURATION.lock().unwrap() = duration / divisor;
+    *CURRENT_EXPAND_DURATION.lock().unwrap() = duration / divisor;
+
+    // if pending_moves > threshold {
+    //     *CURRENT_SLIDE_DURATION.lock().unwrap() = 0;
+    //     *CURRENT_EXPAND_DURATION.lock().unwrap() = 0;
+    //     // *CURRENT_SLEEP_DURATION.lock().unwrap() = 20;
+    // } else {
+        // *CURRENT_SLIDE_DURATION.lock().unwrap() = duration / (pending_moves * 4) as u64;
+        // *CURRENT_EXPAND_DURATION.lock().unwrap() = duration / (pending_moves * 4) as u64;
+        // *CURRENT_SLEEP_DURATION.lock().unwrap() = duration;
+    // }
 
     (*CURRENT_SLIDE_DURATION.lock().unwrap(), *CURRENT_EXPAND_DURATION.lock().unwrap())
 }
@@ -262,7 +272,7 @@ fn slide_tile(html_tile: &HtmlElement, game_tile: &rust_2048::Tile) {
     html_tile.style().set_property("--new_top", &new_top_offset).unwrap();
     html_tile.style().set_property("--new_left", &new_left_offset).unwrap();
 
-    let sliding_animation = format!("sliding {}ms ease-in forwards", CURRENT_SLIDE_DURATION.lock().unwrap());
+    let sliding_animation = format!("sliding {}ms ease-in-out forwards", CURRENT_SLIDE_DURATION.lock().unwrap());
 
     if let Some(_) = &game_tile.merged {
         // Tiles with the --merged_value property set will be marked for the merging animation
@@ -317,6 +327,8 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
     let game_state_mut = game_state.clone();
     let mut game_state_mut = game_state_mut.borrow_mut();
 
+    let mut slide_duration = DEFAULT_SLIDE_DURATION;
+
     while let Some(key_code) = keydown_rx.recv().await {
         match game_state_mut.receive_input(&key_code) {
             InputResult::Ok(new_tile_id, tiles) => {
@@ -324,8 +336,9 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
                 
                 match document.query_selector_all("[class='tile cell']") {
                     Ok(node_list) => {
+                        log!("Begin input_counter:", input_counter.load(Ordering::SeqCst));
+
                         log!("Sliding");
-                        let (slide_duration, _) = set_animation_durations(input_counter.clone(), 2, DEFAULT_SLIDE_DURATION);
                         let removed_tile_ids = slide_tiles(node_list, &tiles);
                         
                         sleep(Duration::from_millis(slide_duration)).await;
@@ -337,6 +350,7 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
                             remove_tile(id);
                         }
 
+                        log!("Expanding");
                         input_counter.fetch_sub(1, Ordering::SeqCst);
                         let (_, expand_duration) = set_animation_durations(input_counter.clone(), 0, DEFAULT_EXPAND_DURATION);
 
@@ -347,6 +361,10 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
                         // await_animations("expand-merge".to_string()).await;
 
                         sleep(Duration::from_millis(expand_duration)).await;
+
+                        (slide_duration, _) = set_animation_durations(input_counter.clone(), 0, DEFAULT_SLIDE_DURATION);
+
+                        log!("End input_counter:", input_counter.load(Ordering::SeqCst));
 
                         // Update the score.
                         update_score(game_state_mut.score);
@@ -379,7 +397,7 @@ fn content() -> Html {
         let document = gloo::utils::document();
         let listener = EventListener::new(&document, "keydown", move |event| {
             let key_code = event.dyn_ref::<web_sys::KeyboardEvent>().unwrap_throw().code();
-            log!("Incrementing input_counter");
+            log!("Incrementing", input_counter.load(Ordering::SeqCst));
             input_counter.fetch_add(1, Ordering::SeqCst);
             keydown_tx.send(key_code).expect("Sending key_code failed.");
         });
