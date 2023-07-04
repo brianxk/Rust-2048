@@ -316,10 +316,11 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
                 
                 match document.query_selector_all("[class='tile cell']") {
                     Ok(node_list) => {
+                        log!("Sliding");
                         let mut slide_duration = DEFAULT_SLIDE_DURATION;
 
                         if moves_pending {
-                            slide_duration = DEFAULT_SLIDE_DURATION / 2;
+                            slide_duration = DEFAULT_SLIDE_DURATION / (input_counter.load(Ordering::SeqCst) as u64);
                         }
 
                         set_animation_durations(input_counter.clone(), 1, slide_duration);
@@ -332,15 +333,16 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
                             remove_tile(id);
                         }
 
+                        log!("Decrementing input_counter");
+                        input_counter.fetch_sub(1, Ordering::SeqCst);
+
+                        // let expand_duration = DEFAULT_EXPAND_DURATION;
+                        set_animation_durations(input_counter.clone(), 0, DEFAULT_EXPAND_DURATION);
+
+                        log!("Expanding");
                         // Render the new Tile.
                         add_tile(get_tile_by_id(&tiles, new_tile_id).expect("Failed to find new Tile."));
 
-                        // Update the score.
-                        update_score(game_state_mut.score);
-
-                        input_counter.fetch_sub(1, Ordering::SeqCst);
-
-                        set_animation_durations(input_counter.clone(), 0, DEFAULT_EXPAND_DURATION);
                         merge_tiles();
                         await_animations("expand-merge".to_string()).await;
 
@@ -349,11 +351,15 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
                         } else {
                             moves_pending = false;
                         }
+                        
+                        // Update the score.
+                        update_score(game_state_mut.score);
                     },
                     Err(_) => log!("NodeList could not be found."),
                 }
             },
             InputResult::Err(InvalidMove) => {
+                log!("Decrementing input_counter");
                 input_counter.fetch_sub(1, Ordering::SeqCst);
             },
         }
@@ -378,6 +384,7 @@ fn content() -> Html {
         let document = gloo::utils::document();
         let listener = EventListener::new(&document, "keydown", move |event| {
             let key_code = event.dyn_ref::<web_sys::KeyboardEvent>().unwrap_throw().code();
+            log!("Incrementing input_counter");
             input_counter.fetch_add(1, Ordering::SeqCst);
             keydown_tx.send(key_code).expect("Sending key_code failed.");
         });

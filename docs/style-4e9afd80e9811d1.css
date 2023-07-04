@@ -132,7 +132,7 @@ table {
     transform-origin: center;
   }
   50% {
-    transform: scale(1.15);
+    transform: scale(1.10);
     transform-origin: center;
   }
   100% {
