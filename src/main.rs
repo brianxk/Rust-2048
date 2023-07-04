@@ -21,8 +21,8 @@ const TILE_DIMENSION: u16 = 120;
 const COLORS: Colors = Colors::new();
 
 // Durations in milliseconds.
-const DEFAULT_SLIDE_DURATION: u64 = 100;
-const DEFAULT_EXPAND_DURATION: u64 = 75;
+const DEFAULT_SLIDE_DURATION: u64 = 82;
+const DEFAULT_EXPAND_DURATION: u64 = 82;
 const DEFAULT_SLEEP_DURATION: u64 = 5;
 
 // Globally mutable variables. If the number of player moves in the queue is greater than 1, all
@@ -169,7 +169,7 @@ fn add_tile(game_tile: &rust_2048::Tile) {
     let (top_offset, left_offset) = convert_to_pixels(game_tile.row, game_tile.col);
 
     let font_size = compute_font_size(&game_tile.value.to_string());
-    let expand_init_animation = format!("expand-init {}ms ease-in-out;", CURRENT_EXPAND_DURATION.lock().unwrap());
+    let expand_init_animation = format!("expand-init {}ms ease-out;", CURRENT_EXPAND_DURATION.lock().unwrap());
 
     let style_args = format!("top: {}px; left: {}px; background-color: {}; color: {}; font-size: {}; animation: {};",
        top_offset,
