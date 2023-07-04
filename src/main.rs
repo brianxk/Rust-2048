@@ -21,8 +21,8 @@ const TILE_DIMENSION: u16 = 120;
 const COLORS: Colors = Colors::new();
 
 // Durations in milliseconds.
-const DEFAULT_SLIDE_DURATION: u64 = 82;
-const DEFAULT_EXPAND_DURATION: u64 = 82;
+const DEFAULT_SLIDE_DURATION: u64 = 125;
+const DEFAULT_EXPAND_DURATION: u64 = 125;
 const DEFAULT_SLEEP_DURATION: u64 = 5;
 
 // Globally mutable variables. If the number of player moves in the queue is greater than 1, all
@@ -90,8 +90,8 @@ fn tile(props: &TileProps) -> Html {
     }
 }
 
-fn set_animation_durations(input_counter: Arc<AtomicU16>) {
-    if input_counter.load(Ordering::SeqCst) > 1 {
+fn set_animation_durations(input_counter: Arc<AtomicU16>, threshold: u16) {
+    if input_counter.load(Ordering::SeqCst) >  threshold {
         *CURRENT_SLIDE_DURATION.lock().unwrap() = 0;
         *CURRENT_EXPAND_DURATION.lock().unwrap() = 0;
         // *CURRENT_SLEEP_DURATION.lock().unwrap() = 20;
@@ -130,11 +130,8 @@ async fn await_animations(animation_name: String) {
             animation.set_id(&c_id);
             let mut play_state = animation.play_state();
 
-            // log!("Looping", &c_id);
-            // log!("play_state before:", play_state);
-
             while !matches!(play_state, AnimationPlayState::Finished) {
-                log!(&animation_name, "sleeping . . .");
+                // log!(&animation_name, "sleeping . . .");
                 sleep(Duration::from_millis(*CURRENT_SLEEP_DURATION.lock().unwrap())).await;
                 
                 let animations = document.get_animations();
@@ -144,21 +141,17 @@ async fn await_animations(animation_name: String) {
                     let a = CssAnimation::from(a);
                     if a.animation_name() == animation_name {
                         if a.id() == c_id {
-                            // log!("Found matching ID", a.id());
                             animation = Some(a);
                             break;
                         }
                     }
                 };
 
-                // play_state = animation.expect(&format!("ID not found: {}", c_id)).play_state();
                 play_state = match animation {
                     Some(a) => a.play_state(),
                     None => break
                 }
             }
-
-            // log!("play_state after:", play_state);
 
             id += 1;
         }
@@ -311,33 +304,19 @@ fn slide_tiles(node_list: web_sys::NodeList, tiles: &Vec<&rust_2048::Tile>) -> V
 }
 
 async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx: UnboundedReceiver<String>, input_counter: Arc<AtomicU16>) {
-    while let Some(key_code) = keydown_rx.recv().await {
-        log!("Key received:", &key_code);
-        let game_state_mut = game_state.clone();
-        let mut game_state_mut = game_state_mut.borrow_mut();
+    let game_state_mut = game_state.clone();
+    let mut game_state_mut = game_state_mut.borrow_mut();
 
+    while let Some(key_code) = keydown_rx.recv().await {
         match game_state_mut.receive_input(&key_code) {
             InputResult::Ok(new_tile_id, tiles) => {
-                log!("Move successful!");
                 let document = gloo::utils::document();
                 
                 match document.query_selector_all("[class='tile cell']") {
                     Ok(node_list) => {
-                        set_animation_durations(input_counter.clone());
-
+                        set_animation_durations(input_counter.clone(), 1);
                         let removed_tile_ids = slide_tiles(node_list, &tiles);
-
-                        // Wait for slide animation to complete.
-                        // sleep(Duration::from_millis(*CURRENT_SLIDE_DURATION.lock().unwrap())).await;
-
-                        // Due to browser inconistencies, the above sleep may not be sufficient for
-                        // all animations to reach completion. await_animations() will sleep in
-                        // increments set by `sleep_duration` until all animations reach the
-                        // "finished" state.
-
-                        let sleep_duration = 20;
                         await_animations("sliding".to_string()).await;
-                        // Consider removing animations once they are complete if this approach does not work.
                         
                         // Removing marked tiles, adding new tile, and updating score 
                         // should occur simultaneously with merge-expand animation.
@@ -345,32 +324,25 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
                             remove_tile(id);
                         }
 
-                        set_animation_durations(input_counter.clone());
-
                         // Render the new Tile.
                         add_tile(get_tile_by_id(&tiles, new_tile_id).expect("Failed to find new Tile."));
 
                         // Update the score.
                         update_score(game_state_mut.score);
 
+                        input_counter.fetch_sub(1, Ordering::SeqCst);
+
+                        set_animation_durations(input_counter.clone(), 0);
                         merge_tiles();
-
-                        // Wait for merge-expand animation to complete.
-                        // sleep(Duration::from_millis(*CURRENT_EXPAND_DURATION.lock().unwrap())).await;
                         await_animations("expand-merge".to_string()).await;
-
-                        log!("Game over:", game_state_mut.game_over());
                     },
                     Err(_) => log!("NodeList could not be found."),
                 }
             },
             InputResult::Err(InvalidMove) => {
-                log!("Invalid move.");
+                input_counter.fetch_sub(1, Ordering::SeqCst);
             },
         }
-
-        // log!("input_counter before sub:", input_counter.load(Ordering::SeqCst));
-        input_counter.fetch_sub(1, Ordering::SeqCst);
     }
 }
 
@@ -378,7 +350,7 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
 fn content() -> Html {
     let game_state = Rc::new(RefCell::new(Game::new()));
     let game_state_for_move_processor = Rc::clone(&game_state);
-    // let game_state_for_animation_listener = Rc::clone(&game_state);
+    let input_counter = Arc::new(AtomicU16::new(0));
  
     // Prevents use of arrow keys for scrolling the page
     preventDefaultScrolling();
@@ -386,7 +358,6 @@ fn content() -> Html {
     // Attach a keydown event listener to the document.
     use_effect(move || {
         let (keydown_tx, keydown_rx) = mpsc::unbounded_channel();
-        let input_counter = Arc::new(AtomicU16::new(0));
 
         spawn_local(process_keydown_messages(game_state_for_move_processor, keydown_rx, input_counter.clone()));
 
