@@ -91,11 +91,7 @@ table {
 }
 
 .tile {
-    font-family: 'Roboto Serif', serif;
-    font-weight: 200;
-    /* text-align: center; */
-    /* vertical-align: middle; */
-    /* line-height: 120px; */
+    font-family: "Andale Mono", AndaleMono, monospace;
     display: flex;
     justify-content: center;
     align-items: center;

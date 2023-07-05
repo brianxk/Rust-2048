@@ -155,7 +155,9 @@ impl Game {
         }
 
         // let first_tile_value = 16384;
+        // let first_tile_value = 2048;
         // let second_tile_value = 131072;
+        // let second_tile_value = 1024;
 
         let first_tile_pos = game.get_random_free_slot().expect("New game board, should not panic.");
         let first_tile_id = game.get_id().unwrap();
