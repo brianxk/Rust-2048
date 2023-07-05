@@ -172,6 +172,12 @@ async fn await_animations(animation_name: String) {
     }
 }
 
+fn remove_tiles(removed_tile_ids: Vec<usize>) {
+    for id in removed_tile_ids {
+        remove_tile(id);
+    }
+}
+
 fn add_tile(game_tile: &rust_2048::Tile) {
     let (top_offset, left_offset) = convert_to_pixels(game_tile.row, game_tile.col);
 
@@ -336,37 +342,13 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
                 
                 match document.query_selector_all("[class='tile cell']") {
                     Ok(node_list) => {
-                        log!("Begin input_counter:", input_counter.load(Ordering::SeqCst));
-
-                        log!("Sliding");
                         let removed_tile_ids = slide_tiles(node_list, &tiles);
-                        
-                        sleep(Duration::from_millis(slide_duration)).await;
-                        // await_animations("sliding".to_string()).await;
-                        
-                        // Removing marked tiles, adding new tile, and updating score 
-                        // should occur simultaneously with merge-expand animation.
-                        for id in removed_tile_ids {
-                            remove_tile(id);
-                        }
-
-                        log!("Expanding");
+                        sleep(Duration::from_millis(DEFAULT_SLIDE_DURATION)).await;
+                        remove_tiles(removed_tile_ids);
                         input_counter.fetch_sub(1, Ordering::SeqCst);
-                        let (_, expand_duration) = set_animation_durations(input_counter.clone(), 0, DEFAULT_EXPAND_DURATION);
-
-                        // Render the new Tile.
                         add_tile(get_tile_by_id(&tiles, new_tile_id).expect("Failed to find new Tile."));
-
                         merge_tiles();
-                        // await_animations("expand-merge".to_string()).await;
-
-                        sleep(Duration::from_millis(expand_duration)).await;
-
-                        (slide_duration, _) = set_animation_durations(input_counter.clone(), 0, DEFAULT_SLIDE_DURATION);
-
-                        log!("End input_counter:", input_counter.load(Ordering::SeqCst));
-
-                        // Update the score.
+                        sleep(Duration::from_millis(DEFAULT_EXPAND_DURATION)).await;
                         update_score(game_state_mut.score);
                     },
                     Err(_) => log!("NodeList could not be found."),

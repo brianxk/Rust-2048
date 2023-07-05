@@ -3,4 +3,4 @@ public_url = "/rust-2048/"
 dist = "docs"
 
 [watch]
-watch = ["/src", "./style.css"]
+watch = ["./src", "./style.css"]
