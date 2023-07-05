@@ -6,6 +6,7 @@ pub const BOARD_DIMENSION: usize = 4;
 const NUM_TILES: usize = BOARD_DIMENSION * BOARD_DIMENSION;
 
 // TODO:
+// 21072
 // 1. Update project description with link to game.
 // 3. Include link to source code.
 // 2. Game over code.
@@ -92,7 +93,8 @@ impl Colors {
         Colors {
             background_dark: "#072931",
             background_light: "#072931",
-            text_dark: "#022244",
+            // text_dark: "#022244",
+            text_dark: "#072931",
             text_light: "#f2ba0d",
             button: "#92cdb9",
             button_hover: "#b4ddcf",
@@ -116,6 +118,10 @@ pub struct Game {
     free_slots: Vec<(usize, usize)>,
     pub score: u32,
     id_list: LinkedList<usize>,
+    pub game_won: bool, // Will be initialized to false, but the frontend will have 
+                        // the freedom to set this to `true` depending on when a
+                        // certain tile value is reached. This means that 2048 does
+                        // not strictly need to be the winning tile.
 }
 
 impl Game {
@@ -141,6 +147,7 @@ impl Game {
             free_slots: Vec::with_capacity(BOARD_DIMENSION * BOARD_DIMENSION),
             score: 0,
             id_list: LinkedList::from(tile_ids),
+            game_won: false,
         };
 
         // If first tile is 4, second tile must be 2.
@@ -273,24 +280,12 @@ impl Game {
         }
     }
 
-    fn clone_board(original_board: &[[Option<Tile>; BOARD_DIMENSION]; BOARD_DIMENSION]) -> [[Option<Tile>; BOARD_DIMENSION]; BOARD_DIMENSION] {
-        const EMPTY_TILE: Option<Tile> = None;
-        const EMPTY_ROW: [Option<Tile>; BOARD_DIMENSION] = [EMPTY_TILE; BOARD_DIMENSION];
-
-        let mut cloned_board = [EMPTY_ROW; BOARD_DIMENSION];
-
-        for i in 0..BOARD_DIMENSION {
-            cloned_board[i] = original_board[i].clone();
-        }
-
-        cloned_board
-    }
-
-    /// Returns true if the game is over. The game is over if no more moves are possible. This will
-    /// be tested by calling the `receive_input` function in all 4 directions on the current board
-    /// state. Although acquiring the 2048 Tile is the win condition, this has no effect on
-    /// gameplay and thus is not checked here. The frontend will be responsible for checking if
-    /// the 2048 Tile has been acquired and for notifying the player.
+    /// Returns: 
+    /// 1) `true` if no more moves are possible.
+    /// 2) `false` if more moves are still possible.
+    ///
+    /// The frontend will be responsible to determining if the game is won. See `Game` struct
+    /// definition for more details.
     pub fn game_over(&self) -> bool {
         let directions = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
 

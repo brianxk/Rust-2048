@@ -635,6 +635,7 @@ dependencies = [
  "gloo",
  "gloo-console",
  "hex_color",
+ "js-sys",
  "lazy_static",
  "rand",
  "tokio",

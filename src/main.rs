@@ -1,24 +1,26 @@
-use tokio::sync::mpsc::UnboundedReceiver;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use yew::prelude::*;
 use rust_2048::*;
 use gloo_console::log;
 use gloo::events::EventListener;
 use wasm_bindgen::{JsCast, UnwrapThrowExt, closure::Closure};
+use wasm_bindgen::prelude::wasm_bindgen;
+use wasm_bindgen_futures::spawn_local;
 use web_sys::{HtmlElement, window, CssAnimation, AnimationPlayState};
 use std::rc::Rc;
 use std::cell::RefCell;
-use wasm_bindgen::prelude::wasm_bindgen;
-use wasm_bindgen_futures::spawn_local;
 use tokio::sync::mpsc;
 use yew::platform::time::sleep;
 use core::time::Duration;
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::{Arc, Mutex};
 use lazy_static::lazy_static;
+use js_sys;
 
 const BORDER_SPACING: u16 = 4;
 const TILE_DIMENSION: u16 = 120;
 const COLORS: Colors = Colors::new();
+const WINNING_TILE: u32 = 2048;
 
 // Durations in milliseconds.
 const DEFAULT_SLIDE_DURATION: u64 = 120;
@@ -255,7 +257,7 @@ fn update_tile(html_tile: &HtmlElement, merged_value: &String) {
 }
 
 fn expand_tile(html_tile: &HtmlElement) {
-    let expanding_animation = format!("expand-merge {}ms ease-in-out", CURRENT_EXPAND_DURATION.lock().unwrap());
+    let expanding_animation = format!("expand-merge {}ms ease-out", CURRENT_EXPAND_DURATION.lock().unwrap());
     html_tile.style().set_property("animation", &expanding_animation).unwrap();
     re_append(html_tile);
 }
@@ -297,9 +299,11 @@ fn slide_tile(html_tile: &HtmlElement, game_tile: &rust_2048::Tile) {
 
 /// Calls slide_tile() in a loop to move each tile into position. Returns a Vec containing the IDs
 /// of every Tile that needs to be deleted from the frontend.
-fn slide_tiles(node_list: web_sys::NodeList, tiles: &Vec<&rust_2048::Tile>) -> Vec<usize> {
+fn slide_tiles(node_list: web_sys::NodeList, tiles: &Vec<&rust_2048::Tile>) -> (Vec<usize>, bool) {
     let document = gloo::utils::document();
     let mut removed_tile_ids = Vec::new();
+
+    let mut game_won = false;
 
     for i in 0..node_list.length() {
         let node = node_list.get(i).unwrap();
@@ -320,16 +324,20 @@ fn slide_tiles(node_list: web_sys::NodeList, tiles: &Vec<&rust_2048::Tile>) -> V
 
                 // Mark this tile for removal from the frontend.
                 removed_tile_ids.push(removed_tile.id);
+
+                if updated_tile.value == WINNING_TILE {
+                    game_won = true;
+                }
             }
 
             slide_tile(html_tile, updated_tile);
         }
     }
 
-    removed_tile_ids
+    (removed_tile_ids, game_won)
 }
 
-async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx: UnboundedReceiver<String>, input_counter: Arc<AtomicU16>) {
+async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx: UnboundedReceiver<String>, input_counter: Arc<AtomicU16>, keydown_handler: Arc<Closure<dyn FnMut(yew::KeyboardEvent)>>) {
     let game_state_mut = game_state.clone();
     let mut game_state_mut = game_state_mut.borrow_mut();
 
@@ -339,10 +347,12 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
         match game_state_mut.receive_input(&key_code) {
             InputResult::Ok(new_tile_id, tiles) => {
                 let document = gloo::utils::document();
-                
+                let mut game_won = false;
+
                 match document.query_selector_all("[class='tile cell']") {
                     Ok(node_list) => {
-                        let removed_tile_ids = slide_tiles(node_list, &tiles);
+                        let removed_tile_ids;
+                        (removed_tile_ids, game_won) = slide_tiles(node_list, &tiles);
                         sleep(Duration::from_millis(DEFAULT_SLIDE_DURATION)).await;
                         remove_tiles(removed_tile_ids);
                         input_counter.fetch_sub(1, Ordering::SeqCst);
@@ -353,6 +363,15 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
                     },
                     Err(_) => log!("NodeList could not be found."),
                 }
+
+                if !game_state_mut.game_won && game_won {
+                    game_state_mut.game_won = true;
+                    document.remove_event_listener_with_callback("keydown", Closure::as_ref(&keydown_handler).unchecked_ref()).unwrap();
+                }
+
+                if game_state_mut.game_over() {
+                    document.remove_event_listener_with_callback("keydown", Closure::as_ref(&keydown_handler).unchecked_ref()).unwrap();
+                }
             },
             InputResult::Err(InvalidMove) => {
                 input_counter.fetch_sub(1, Ordering::SeqCst);
@@ -361,11 +380,19 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
     }
 }
 
+fn produce_keydown_handler(keydown_tx: UnboundedSender<String>, input_counter: Arc<AtomicU16>) -> Box<dyn FnMut(KeyboardEvent) -> ()> {
+    Box::new(move |event: KeyboardEvent| {
+        let key_code = event.code();
+        log!("Incrementing", input_counter.load(Ordering::SeqCst));
+        input_counter.fetch_add(1, Ordering::SeqCst);
+        keydown_tx.send(key_code).expect("Sending key_code failed.");
+    })
+}
+
 #[function_component(Content)]
 fn content() -> Html {
     let game_state = Rc::new(RefCell::new(Game::new()));
     let game_state_for_move_processor = Rc::clone(&game_state);
-    let input_counter = Arc::new(AtomicU16::new(0));
  
     // Prevents use of arrow keys for scrolling the page
     preventDefaultScrolling();
@@ -373,20 +400,23 @@ fn content() -> Html {
     // Attach a keydown event listener to the document.
     use_effect(move || {
         let (keydown_tx, keydown_rx) = mpsc::unbounded_channel();
-
-        spawn_local(process_keydown_messages(game_state_for_move_processor, keydown_rx, input_counter.clone()));
+        let input_counter = Arc::new(AtomicU16::new(0));
 
         let document = gloo::utils::document();
-        let listener = EventListener::new(&document, "keydown", move |event| {
-            let key_code = event.dyn_ref::<web_sys::KeyboardEvent>().unwrap_throw().code();
-            log!("Incrementing", input_counter.load(Ordering::SeqCst));
-            input_counter.fetch_add(1, Ordering::SeqCst);
-            keydown_tx.send(key_code).expect("Sending key_code failed.");
-        });
 
-        // Called when the component is unmounted.  The closure has to hold on to `listener`, because if it gets
-        // dropped, `gloo` detaches it from the DOM. So it's important to do _something_, even if it's just dropping it.
-        || drop(listener)
+        let keydown_handler = Arc::new(Closure::wrap(produce_keydown_handler(keydown_tx, input_counter.clone())));
+        let keydown_handler_clone = keydown_handler.clone();
+        // let keydown_handler = Closure::wrap(produce_keydown_handler(keydown_tx, input_counter.clone()));
+
+        document.add_event_listener_with_callback("keydown", Closure::as_ref(&keydown_handler).unchecked_ref()).unwrap();
+
+        spawn_local(process_keydown_messages(game_state_for_move_processor, keydown_rx, input_counter.clone(), keydown_handler_clone));
+
+        || {
+            let document = gloo::utils::document();
+            document.remove_event_listener_with_callback("keydown", Closure::as_ref(&keydown_handler).unchecked_ref()).unwrap();
+            drop(keydown_handler)
+        }
     });
 
     // Add event listener for sliding animation end - update inner html value.
@@ -418,7 +448,7 @@ fn content() -> Html {
 
         || {
             // Must remove the callback or else memory leak will occur each time New Game is clicked.
-            let body = gloo::utils::body();
+            // let body = gloo::utils::body();
             // body.remove_event_listener_with_callback("animationend", merge_expand.as_ref().unchecked_ref()).unwrap();
             // body.remove_event_listener_with_callback("animationcancel", merge_expand.as_ref().unchecked_ref()).unwrap();
             drop(merge_expand)
