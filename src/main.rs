@@ -359,7 +359,7 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
                         removed_tile_ids = slide_tiles(node_list, &tiles);
                         sleep(Duration::from_millis(DEFAULT_SLIDE_DURATION)).await;
                         remove_tiles(removed_tile_ids);
-                        input_counter.fetch_sub(1, Ordering::SeqCst);
+                        decrement_counter(input_counter.clone());
                         add_tile(get_tile_by_id(&tiles, new_tile_id).expect("Failed to find new Tile."));
                         merge_tiles();
                         sleep(Duration::from_millis(DEFAULT_EXPAND_DURATION)).await;
@@ -375,14 +375,14 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
 
                     // Consume keyboard inputs remaining in the message queue.
                     while input_counter.load(Ordering::SeqCst) > 0 && matches!(keydown_rx.recv().await, Some(_)) {
-                        input_counter.fetch_sub(1, Ordering::SeqCst);
+                        decrement_counter(input_counter.clone());
                     }
 
                     handle_game_over(game_won, keydown_handler.clone());
                 }
             },
             InputResult::Err(InvalidMove) => {
-                input_counter.fetch_sub(1, Ordering::SeqCst);
+                decrement_counter(input_counter.clone());
             },
         }
     }
@@ -391,8 +391,7 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
 fn produce_keydown_handler(keydown_tx: UnboundedSender<String>, input_counter: Arc<AtomicU16>) -> Box<dyn FnMut(KeyboardEvent) -> ()> {
     Box::new(move |event: KeyboardEvent| {
         let key_code = event.code();
-        log!("Incrementing", input_counter.load(Ordering::SeqCst));
-        input_counter.fetch_add(1, Ordering::SeqCst);
+        increment_counter(input_counter.clone());
         keydown_tx.send(key_code).expect("Sending key_code failed.");
     })
 }
@@ -413,6 +412,16 @@ fn new_game_callback(new_game_hook: UseStateHandle<u32>) -> Callback<MouseEvent>
     }
 
     Callback::from(move |_| new_game_hook.set(*new_game_hook + 1))
+}
+
+fn increment_counter(input_counter: Arc<AtomicU16>) {
+    log!("Incrementing", input_counter.load(Ordering::SeqCst));
+    input_counter.fetch_add(1, Ordering::SeqCst);
+}
+
+fn decrement_counter(input_counter: Arc<AtomicU16>) {
+    log!("Decrementing", input_counter.load(Ordering::SeqCst));
+    input_counter.fetch_sub(1, Ordering::SeqCst);
 }
 
 #[function_component(Content)]
