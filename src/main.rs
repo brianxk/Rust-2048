@@ -1,26 +1,22 @@
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
-use yew::prelude::*;
-use rust_2048::*;
-use gloo_console::log;
-use gloo::events::EventListener;
-use wasm_bindgen::{JsCast, UnwrapThrowExt, closure::Closure};
-use wasm_bindgen::prelude::wasm_bindgen;
-use wasm_bindgen_futures::spawn_local;
-use web_sys::{HtmlElement, window, CssAnimation, AnimationPlayState};
-use std::rc::Rc;
-use std::cell::RefCell;
-use tokio::sync::mpsc;
-use yew::platform::time::sleep;
 use core::time::Duration;
+use gloo_console::log;
+use lazy_static::lazy_static;
+use rust_2048::*;
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::{Arc, Mutex};
-use lazy_static::lazy_static;
-use js_sys;
+use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use wasm_bindgen::prelude::wasm_bindgen;
+use wasm_bindgen::{JsCast, closure::Closure};
+use wasm_bindgen_futures::spawn_local;
+use web_sys::{HtmlElement, window, CssAnimation, AnimationPlayState};
+use yew::platform::time::sleep;
+use yew::prelude::*;
 
 const BORDER_SPACING: u16 = 4;
 const TILE_DIMENSION: u16 = 120;
 const COLORS: Colors = Colors::new();
-const WINNING_TILE: u32 = 2048;
 
 // Durations in milliseconds.
 const DEFAULT_SLIDE_DURATION: u64 = 120;
@@ -116,6 +112,23 @@ fn set_animation_durations(input_counter: Arc<AtomicU16>, threshold: u16, durati
     // }
 
     (*CURRENT_SLIDE_DURATION.lock().unwrap(), *CURRENT_EXPAND_DURATION.lock().unwrap())
+}
+
+fn handle_game_over(game_won: bool, keydown_handler: Arc<Closure<dyn FnMut(yew::KeyboardEvent)>>) {
+    // Disable keyboard events when game is over.
+    let document = gloo::utils::document();
+    document.remove_event_listener_with_callback("keydown", Closure::as_ref(&keydown_handler).unchecked_ref()).unwrap();
+
+    let mut game_over_type = ".gameover".to_string();
+
+    if game_won {
+        game_over_type += ".won";
+    } else {
+        game_over_type += ".lost";
+    }
+
+    let game_over_layer = document.query_selector(&game_over_type).unwrap().unwrap();
+    game_over_layer.remove_attribute("hidden").expect("Failed to remove .game.loss hidden layer.");
 }
 
 fn remove_tile(id: usize) {
@@ -299,11 +312,9 @@ fn slide_tile(html_tile: &HtmlElement, game_tile: &rust_2048::Tile) {
 
 /// Calls slide_tile() in a loop to move each tile into position. Returns a Vec containing the IDs
 /// of every Tile that needs to be deleted from the frontend.
-fn slide_tiles(node_list: web_sys::NodeList, tiles: &Vec<&rust_2048::Tile>) -> (Vec<usize>, bool) {
+fn slide_tiles(node_list: web_sys::NodeList, tiles: &Vec<&rust_2048::Tile>) -> Vec<usize> {
     let document = gloo::utils::document();
     let mut removed_tile_ids = Vec::new();
-
-    let mut game_won = false;
 
     for i in 0..node_list.length() {
         let node = node_list.get(i).unwrap();
@@ -324,35 +335,28 @@ fn slide_tiles(node_list: web_sys::NodeList, tiles: &Vec<&rust_2048::Tile>) -> (
 
                 // Mark this tile for removal from the frontend.
                 removed_tile_ids.push(removed_tile.id);
-
-                if updated_tile.value == WINNING_TILE {
-                    game_won = true;
-                }
             }
 
             slide_tile(html_tile, updated_tile);
         }
     }
 
-    (removed_tile_ids, game_won)
+    removed_tile_ids
 }
 
 async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx: UnboundedReceiver<String>, input_counter: Arc<AtomicU16>, keydown_handler: Arc<Closure<dyn FnMut(yew::KeyboardEvent)>>) {
     let game_state_mut = game_state.clone();
     let mut game_state_mut = game_state_mut.borrow_mut();
 
-    let mut slide_duration = DEFAULT_SLIDE_DURATION;
-
     while let Some(key_code) = keydown_rx.recv().await {
         match game_state_mut.receive_input(&key_code) {
-            InputResult::Ok(new_tile_id, tiles) => {
+            InputResult::Ok(new_tile_id, tiles, game_won) => {
                 let document = gloo::utils::document();
-                let mut game_won = false;
 
                 match document.query_selector_all("[class='tile cell']") {
                     Ok(node_list) => {
                         let removed_tile_ids;
-                        (removed_tile_ids, game_won) = slide_tiles(node_list, &tiles);
+                        removed_tile_ids = slide_tiles(node_list, &tiles);
                         sleep(Duration::from_millis(DEFAULT_SLIDE_DURATION)).await;
                         remove_tiles(removed_tile_ids);
                         input_counter.fetch_sub(1, Ordering::SeqCst);
@@ -364,13 +368,9 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
                     Err(_) => log!("NodeList could not be found."),
                 }
 
-                if !game_state_mut.game_won && game_won {
-                    game_state_mut.game_won = true;
+                if game_state_mut.game_over() || game_won {
                     document.remove_event_listener_with_callback("keydown", Closure::as_ref(&keydown_handler).unchecked_ref()).unwrap();
-                }
-
-                if game_state_mut.game_over() {
-                    document.remove_event_listener_with_callback("keydown", Closure::as_ref(&keydown_handler).unchecked_ref()).unwrap();
+                    handle_game_over(game_won, keydown_handler.clone());
                 }
             },
             InputResult::Err(InvalidMove) => {
@@ -505,6 +505,8 @@ fn content() -> Html {
                         }
                     })
                 }
+                <GameWonLayer/>
+                <GameLostLayer/>
             </div>
         </div>
     }
@@ -550,19 +552,21 @@ fn score(props: &ScoreProps) -> Html {
     }
 }
 
-#[function_component(WinLayer)]
-fn win_layer() -> Html {
-    html! {
+#[function_component(GameWonLayer)]
+fn game_won_layer() -> Html {
+    let style_args = format!("--game_over_color: {};", COLORS.text_light);
 
+    html! {
+        <div hidden=true class="gameover won" style={style_args}/>
     }
 }
 
-#[function_component(LossLayer)]
-fn loss_layer() -> Html {
-    let style_args = format!("");
+#[function_component(GameLostLayer)]
+fn game_lost_layer() -> Html {
+    let style_args = format!("--game_over_color: {};", COLORS.button_hover);
 
     html! {
-        <div class="gameover" style={style_args}/>
+        <div hidden=true class="gameover lost" style={style_args}/>
     }
 }
 
@@ -636,7 +640,7 @@ fn compute_font_size(value: &String) -> String {
     let len = value.len();
 
     if len > 5 {
-        font_size = "2.15em";
+        font_size = "2.05em";
     } else if len > 4 {
         font_size = "2.50em";
     } else if len > 3 {
