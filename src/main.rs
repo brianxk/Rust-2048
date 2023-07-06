@@ -11,6 +11,7 @@ use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::{JsCast, closure::Closure};
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{HtmlElement, window, CssAnimation, AnimationPlayState};
+use yew::html::ImplicitClone;
 use yew::platform::time::sleep;
 use yew::prelude::*;
 
@@ -396,6 +397,24 @@ fn produce_keydown_handler(keydown_tx: UnboundedSender<String>, input_counter: A
     })
 }
 
+fn new_game_callback(new_game_hook: UseStateHandle<u32>) -> Callback<MouseEvent> {
+    // Elements manipulated manually using web_sys do not get removed when this component is re-rendered.
+    // Must remove them manually here.
+    let document = gloo::utils::document();
+    match document.query_selector_all("[class='tile cell']") {
+        Ok(node_list) => {
+            for i in 0..node_list.length() {
+                let element = node_list.get(i).unwrap();
+                let element = element.dyn_ref::<HtmlElement>().unwrap();
+                element.remove();
+            }
+        },
+        Err(_) => log!("Tiles could not be found."),
+    }
+
+    Callback::from(move |_| new_game_hook.set(*new_game_hook + 1))
+}
+
 #[function_component(Content)]
 fn content() -> Html {
     let game_state = Rc::new(RefCell::new(Game::new()));
@@ -413,7 +432,6 @@ fn content() -> Html {
 
         let keydown_handler = Arc::new(Closure::wrap(produce_keydown_handler(keydown_tx, input_counter.clone())));
         let keydown_handler_clone = keydown_handler.clone();
-        // let keydown_handler = Closure::wrap(produce_keydown_handler(keydown_tx, input_counter.clone()));
 
         document.add_event_listener_with_callback("keydown", Closure::as_ref(&keydown_handler).unchecked_ref()).unwrap();
 
@@ -465,30 +483,12 @@ fn content() -> Html {
     // use_state() hook is used to trigger a re-render whenever the `New Game` button is clicked.
     // The value is used as a key to each Tile component in order to its `expand-init` animation.
     let new_game = use_state(|| 0);
-    let onclick = {
-        // Elements manipulated manually using web_sys do not get removed when this component is re-rendered.
-        // Must remove them manually here.
-        let document = gloo::utils::document();
-        match document.query_selector_all("[class='tile cell']") {
-            Ok(node_list) => {
-                for i in 0..node_list.length() {
-                    let element = node_list.get(i).unwrap();
-                    let element = element.dyn_ref::<HtmlElement>().unwrap();
-                    element.remove();
-                }
-            },
-            Err(_) => log!("Tiles could not be found."),
-        }
-
-        let new_game = new_game.clone();
-        Callback::from(move |_| new_game.set(*new_game + 1))
-    };
-
     let new_game_render = *new_game.clone();
+    let new_game_onclick = new_game_callback(new_game.clone());
 
     html! {
         <div class="content" key={new_game_render}>
-            <Metadata score={0} {onclick}/>
+            <MetadataContainer score={0} onclick={&new_game_onclick}/>
             <div class="board-container">
                 <GameBoard/>
                 { 
@@ -512,37 +512,42 @@ fn content() -> Html {
                         }
                     })
                 }
-                <GameWonLayer/>
-                <GameLostLayer/>
+                <GameWonLayer onclick={&new_game_onclick}/>
+                <GameLostLayer onclick={&new_game_onclick}/>
             </div>
         </div>
     }
 }
 
-#[derive(Properties, PartialEq)]
+#[derive(PartialEq, Clone)]
 struct MetadataProps {
+    button_border: String,
+    button_background: String,
+    button_text: String,
+    button_hover: String,
+}
+
+fn create_default_metadata_props() -> MetadataProps {
+    MetadataProps {
+        button_border: COLORS.text_dark.to_string(),
+        button_background: COLORS.button.to_string(),
+        button_text: COLORS.text_dark.to_string(),
+        button_hover: COLORS.button_hover.to_string(),
+    }
+}
+
+#[derive(Properties, PartialEq)]
+struct MetadataContainerProps {
     onclick: Callback<MouseEvent>,
     score: u32,
 }
 
-#[function_component(Metadata)]
-fn metadata(props: &MetadataProps) -> Html {
-    let style_args = format!("--button_border: {}; 
-                              --button_background: {};
-                              --button_hover: {};
-                              --button_text: {};",
-                              COLORS.text_dark,
-                              COLORS.button,
-                              COLORS.button_hover,
-                              COLORS.text_dark,
-                              );
-
-    let onclick = props.onclick.clone();
-
+#[function_component(MetadataContainer)]
+fn metadata_container(props: &MetadataContainerProps) -> Html {
     html! {
-        <div class="metadata" style={style_args}>
+        <div class="metadata-container">
             <Score score={props.score}/>
-            <button class="new-game" {onclick}>{ "New Game" }</button>
+            <NewGameButton onclick={props.onclick.clone()} button_text={"New Game"}/>
         </div>
     }
 }
@@ -550,30 +555,74 @@ fn metadata(props: &MetadataProps) -> Html {
 #[derive(Properties, PartialEq)]
 struct ScoreProps {
     score: u32,
+    #[prop_or_else(create_default_metadata_props)]
+    metadata_props: MetadataProps,
 }
 
 #[function_component(Score)]
 fn score(props: &ScoreProps) -> Html {
+    let style_args = format!("--button_border: {};
+                              --button_background: {};
+                              --button_text: {};",
+                              props.metadata_props.button_border,
+                              props.metadata_props.button_background,
+                              props.metadata_props.button_text,
+                              );
+
     html! {
-        <div class="score">{props.score}</div>
+        <div class="metadata score" style={style_args}>{props.score}</div>
     }
 }
 
+#[derive(Properties, PartialEq)]
+struct NewGameProps {
+    onclick: Callback<MouseEvent>,
+    button_text: String,
+    #[prop_or_else(create_default_metadata_props)]
+    metadata_props: MetadataProps,
+}
+
+#[function_component(NewGameButton)]
+fn new_game_button(props: &NewGameProps) -> Html {
+    let style_args = format!("--button_border: {};
+                              --button_background: {};
+                              --button_text: {};
+                              --button_hover: {};",
+                              props.metadata_props.button_border,
+                              props.metadata_props.button_background,
+                              props.metadata_props.button_text,
+                              props.metadata_props.button_hover,
+                              );
+
+    html! {
+        <button class="metadata" onclick={props.onclick.clone()} style={style_args}>{ &props.button_text }</button>
+    }
+}
+
+#[derive(Properties, PartialEq)]
+struct GameOverProps {
+    onclick: Callback<MouseEvent>,
+}
+
 #[function_component(GameWonLayer)]
-fn game_won_layer() -> Html {
+fn game_won_layer(props: &GameOverProps) -> Html {
     let style_args = format!("--game_over_color: {};", COLORS.text_light);
 
     html! {
-        <div hidden=true class="gameover won" style={style_args}/>
+        <div hidden=true class="gameover won" style={style_args}>
+            <NewGameButton onclick={props.onclick.clone()} button_text={"Start Over"}/>
+        </div>
     }
 }
 
 #[function_component(GameLostLayer)]
-fn game_lost_layer() -> Html {
+fn game_lost_layer(props: &GameOverProps) -> Html {
     let style_args = format!("--game_over_color: {};", COLORS.button_hover);
 
     html! {
-        <div hidden=true class="gameover lost" style={style_args}/>
+        <div hidden=true class="gameover lost" style={style_args}>
+            <NewGameButton onclick={props.onclick.clone()} button_text={"Start Over"}/>
+        </div>
     }
 }
 

@@ -30,12 +30,12 @@ div.content {
     align-items: center;
 }
 
-div.metadata {
+div.metadata-container {
     height: 80px;
     position: relative;
 }
 
-div.metadata > * {
+.metadata {
     position: absolute;
     bottom: 15px;
     border: solid 1px var(--button_border);
@@ -44,22 +44,21 @@ div.metadata > * {
     height: 35px;
     width: 130px;
     font-size: 1.15em;
+    text-align: center;
+    line-height: 35px;
     color: var(--button_text);
 }
 
-.score {
-    left: 0px;
-    text-align: center;
-    line-height: 35px;
-}
-
-div.metadata > .new-game {
-    right: 0px;
-    width: 125px;
-}
-
-.new-game:hover {
+button.metadata:hover {
     background-color: var(--button_hover);
+}
+
+div.metadata-container > div {
+    left: 0px;
+}
+
+div.metadata-container > button {
+    right: 0px;
 }
 
 div.board-container {

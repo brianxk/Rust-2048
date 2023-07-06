@@ -94,7 +94,6 @@ impl Colors {
         Colors {
             background_dark: "#072931",
             background_light: "#072931",
-            // text_dark: "#022244",
             text_dark: "#072931",
             text_light: "#f2ba0d",
             button: "#92cdb9",
@@ -515,7 +514,7 @@ impl Game {
     /// 3) All powers of 2 between multiples of 4 are interpolated between the two base colors.
     fn get_tile_colors(&self, tile_value: u32) -> (String, String) {
         let base_colors: [&str; 4] = [
-                                      "#FFD700", // Yellow
+                                      "#f2ba0d", // Yellow // Yellow // Yellow
                                       "#F50A40", // Magenta
                                       "#3949AB", // Blue
                                       "#6A0DAD", // Purple
