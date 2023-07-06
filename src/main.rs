@@ -31,7 +31,6 @@ lazy_static! {
     static ref CURRENT_SLEEP_DURATION: Mutex<u64> = Mutex::new(DEFAULT_SLEEP_DURATION);
 }
 
-
 #[wasm_bindgen(module = "/prevent_arrow_scrolling.js")]
 extern "C" {
     fn preventDefaultScrolling();
@@ -128,7 +127,7 @@ fn handle_game_over(game_won: bool, keydown_handler: Arc<Closure<dyn FnMut(yew::
     }
 
     let game_over_layer = document.query_selector(&game_over_type).unwrap().unwrap();
-    game_over_layer.remove_attribute("hidden").expect("Failed to remove .game.loss hidden layer.");
+    game_over_layer.remove_attribute("hidden").expect("Failed to remove hidden attribute.");
 }
 
 fn remove_tile(id: usize) {
@@ -370,6 +369,14 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
 
                 if game_state_mut.game_over() || game_won {
                     document.remove_event_listener_with_callback("keydown", Closure::as_ref(&keydown_handler).unchecked_ref()).unwrap();
+
+                    log!("Inputs remaining:", input_counter.load(Ordering::SeqCst));
+
+                    // Consume keyboard inputs remaining in the message queue.
+                    while input_counter.load(Ordering::SeqCst) > 0 && matches!(keydown_rx.recv().await, Some(_)) {
+                        input_counter.fetch_sub(1, Ordering::SeqCst);
+                    }
+
                     handle_game_over(game_won, keydown_handler.clone());
                 }
             },

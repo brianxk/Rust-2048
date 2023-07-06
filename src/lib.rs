@@ -131,7 +131,7 @@ impl Game {
     /// This means that the board will be empty save for two starting tiles.
     ///
     /// The two tiles will either both be 2's or one 2 and one 4, always in random positions.
-    const WINNING_TILE: u32 = 32;
+    const WINNING_TILE: u32 = 2048;
 
     pub fn new() -> Game {
         const EMPTY_TILE: Option<Tile> = None;
@@ -309,7 +309,7 @@ impl Game {
         let mut recycled_ids: Vec<usize> = Vec::new();
         self.reset_merged_flags();
 
-        let mut game_won = false;
+        let mut winning_tile_reached = false;
 
         // i in the loops below represents the index difference between the Tile's starting slot
         // and its destination slot.
@@ -337,7 +337,7 @@ impl Game {
                             if row.checked_sub(i).is_some_and(|diff| self.board[diff][col].as_ref().unwrap().value == tile.value && self.board[diff][col].as_ref().unwrap().merged.is_none()) {
                                 let removed_tile = self.board[row - i][col].take().unwrap();
 
-                                game_won = self.merge_tiles(&mut tile, removed_tile.clone(), &mut recycled_ids);
+                                winning_tile_reached = self.merge_tiles(&mut tile, removed_tile.clone(), &mut recycled_ids);
                                 self.update_tile_and_board(tile, removed_tile.row, removed_tile.col);
                                 move_occurred = true;
                             } else {
@@ -365,7 +365,7 @@ impl Game {
                             if row.checked_add_max(i, BOARD_DIMENSION).is_some_and(|sum| self.board[sum][col].as_ref().unwrap().value == tile.value && self.board[sum][col].as_ref().unwrap().merged.is_none()) {
                                 let removed_tile = self.board[row + i][col].take().unwrap();
 
-                                game_won = self.merge_tiles(&mut tile, removed_tile.clone(), &mut recycled_ids);
+                                winning_tile_reached = self.merge_tiles(&mut tile, removed_tile.clone(), &mut recycled_ids);
                                 self.update_tile_and_board(tile, removed_tile.row, removed_tile.col);
                                 move_occurred = true;
                             } else {
@@ -393,7 +393,7 @@ impl Game {
                             if col.checked_sub(i).is_some_and(|diff| self.board[row][diff].as_ref().unwrap().value == tile.value && self.board[row][diff].as_ref().unwrap().merged.is_none()) {
                                 let removed_tile = self.board[row][col - i].take().unwrap();
                                 
-                                game_won = self.merge_tiles(&mut tile, removed_tile.clone(), &mut recycled_ids);
+                                winning_tile_reached = self.merge_tiles(&mut tile, removed_tile.clone(), &mut recycled_ids);
                                 self.update_tile_and_board(tile, removed_tile.row, removed_tile.col);
 
                                 move_occurred = true;
@@ -423,7 +423,7 @@ impl Game {
                             if col.checked_add_max(i, BOARD_DIMENSION).is_some_and(|sum| self.board[row][sum].as_ref().unwrap().value == tile.value && self.board[row][sum].as_ref().unwrap().merged.is_none()) {
                                 let removed_tile = self.board[row][col + i].take().unwrap();
 
-                                game_won = self.merge_tiles(&mut tile, removed_tile.clone(), &mut recycled_ids);
+                                winning_tile_reached = self.merge_tiles(&mut tile, removed_tile.clone(), &mut recycled_ids);
                                 self.update_tile_and_board(tile, removed_tile.row, removed_tile.col);
 
                                 move_occurred = true;
@@ -454,7 +454,15 @@ impl Game {
                     let new_tile = Tile::new(new_tile_value, new_id, tile_background, tile_text, i, j);
                     self.board[i][j] = Some(new_tile);
 
-                    InputResult::Ok(new_id, self.get_tiles(), game_won)
+                    // Game can only be won the first time a winning tile is reached.
+                    let mut send_game_won = false;
+
+                    if !self.game_won && winning_tile_reached {
+                        send_game_won = true;
+                        self.game_won = true;
+                    }
+
+                    InputResult::Ok(new_id, self.get_tiles(), send_game_won)
                 },
                 None => unreachable!(),
             }
