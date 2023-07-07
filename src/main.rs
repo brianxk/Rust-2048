@@ -413,22 +413,36 @@ fn produce_keydown_handler(keydown_tx: UnboundedSender<String>, input_counter: A
     })
 }
 
-fn new_game_callback(new_game_hook: UseStateHandle<u32>) -> Callback<MouseEvent> {
-    // Elements manipulated manually using web_sys do not get removed when this component is re-rendered.
-    // Must remove them manually here.
-    let document = gloo::utils::document();
-    match document.query_selector_all("[class='tile cell']") {
-        Ok(node_list) => {
-            for i in 0..node_list.length() {
-                let element = node_list.get(i).unwrap();
-                let element = element.dyn_ref::<HtmlElement>().unwrap();
-                element.remove();
-            }
-        },
-        Err(_) => log!("Tiles could not be found."),
-    }
+fn keep_playing_callback(keydown_handler: Arc<Closure<dyn FnMut(yew::KeyboardEvent)>>) -> Callback<MouseEvent> {
+    Callback::from(move |_| {
+        // Re-enable keyboard events.
+        let document = gloo::utils::document();
+        document.add_event_listener_with_callback("keydown", Closure::as_ref(&keydown_handler).unchecked_ref()).unwrap();
 
-    Callback::from(move |_| new_game_hook.set(*new_game_hook + 1))
+        // Remove gameover layer.
+        let gameover_layer = document.query_selector(".gameover.won").unwrap().unwrap();
+        gameover_layer.remove();
+    })
+}
+
+fn new_game_callback(new_game_hook: UseStateHandle<u32>) -> Callback<MouseEvent> {
+    Callback::from(move |_| {
+        // Elements manipulated manually using web_sys do not get removed when this component is re-rendered.
+        // Must remove them manually here.
+        let document = gloo::utils::document();
+        match document.query_selector_all("[class='tile cell']") {
+            Ok(node_list) => {
+                for i in 0..node_list.length() {
+                    let element = node_list.get(i).unwrap();
+                    let element = element.dyn_ref::<HtmlElement>().unwrap();
+                    element.remove();
+                }
+            },
+            Err(_) => log!("Tiles could not be found."),
+        }
+
+        new_game_hook.set(*new_game_hook + 1);
+    })
 }
 
 fn increment_counter(input_counter: Arc<AtomicU16>) {
@@ -450,18 +464,18 @@ fn content() -> Html {
     preventDefaultScrolling();
 
     // Attach a keydown event listener to the document.
+    let (keydown_tx, keydown_rx) = mpsc::unbounded_channel();
+    let input_counter = Arc::new(AtomicU16::new(0));
+
+    let keydown_handler = Arc::new(Closure::wrap(produce_keydown_handler(keydown_tx, input_counter.clone())));
+    let keydown_processor_clone = keydown_handler.clone();
+    let keep_playing_clone = keydown_handler.clone();
+
     use_effect(move || {
-        let (keydown_tx, keydown_rx) = mpsc::unbounded_channel();
-        let input_counter = Arc::new(AtomicU16::new(0));
-
         let document = gloo::utils::document();
-
-        let keydown_handler = Arc::new(Closure::wrap(produce_keydown_handler(keydown_tx, input_counter.clone())));
-        let keydown_handler_clone = keydown_handler.clone();
-
         document.add_event_listener_with_callback("keydown", Closure::as_ref(&keydown_handler).unchecked_ref()).unwrap();
 
-        spawn_local(process_keydown_messages(game_state_for_move_processor, keydown_rx, input_counter.clone(), keydown_handler_clone));
+        spawn_local(process_keydown_messages(game_state_for_move_processor, keydown_rx, input_counter.clone(), keydown_processor_clone));
 
         || {
             let document = gloo::utils::document();
@@ -512,11 +526,13 @@ fn content() -> Html {
     // The value is used as a key to each Tile component in order to its `expand-init` animation.
     let new_game = use_state(|| 0);
     let new_game_render = *new_game.clone();
-    let new_game_onclick = new_game_callback(new_game.clone());
+    let new_game_callback = new_game_callback(new_game.clone());
+    let keep_playing_callback = keep_playing_callback(keep_playing_clone);
+    let placeholder_callback = Callback::from(|_| {});
 
     html! {
         <div class="content" key={new_game_render}>
-            <MetadataContainer score={0} onclick={&new_game_onclick}/>
+            <MetadataContainer score={0} onclick={&new_game_callback}/>
             <div class="board-container">
                 <GameBoard/>
                 { 
@@ -540,8 +556,10 @@ fn content() -> Html {
                         }
                     })
                 }
-                <GameWonLayer onclick={&new_game_onclick}/>
-                <GameLostLayer onclick={&new_game_onclick}/>
+                // GameLostLayer does not use `keep_playing_callback` but not worth creating a
+                // separate props struct for this.
+                <GameWonLayer new_game_callback={&new_game_callback} keep_playing_callback={&keep_playing_callback}/>
+                <GameLostLayer new_game_callback={&new_game_callback} keep_playing_callback={&placeholder_callback}/>
             </div>
         </div>
     }
@@ -611,40 +629,43 @@ fn new_game_button(props: &NewGameProps) -> Html {
 
 #[derive(Properties, PartialEq)]
 struct GameOverProps {
-    onclick: Callback<MouseEvent>,
+    new_game_callback: Callback<MouseEvent>,
+    keep_playing_callback: Callback<MouseEvent>,
 }
 
 #[function_component(GameWonLayer)]
 fn game_won_layer(props: &GameOverProps) -> Html {
-    let style_args = game_over_layer_style_args();
+    let style_args = game_over_layer_style_args(true);
 
     html! {
         <div hidden=true class="gameover won" style={style_args}>
-            <NewGameButton onclick={props.onclick.clone()} button_text={"Start Over"} disabled={true}/>
-            <NewGameButton onclick={props.onclick.clone()} button_text={"Keep Playing"} disabled={true}/>
+            <NewGameButton onclick={props.keep_playing_callback.clone()} button_text={"Keep Playing"} disabled={true}/>
+            <NewGameButton onclick={props.new_game_callback.clone()} button_text={"Start Over"} disabled={true}/>
         </div>
     }
 }
 
 #[function_component(GameLostLayer)]
 fn game_lost_layer(props: &GameOverProps) -> Html {
-    let style_args = game_over_layer_style_args();
+    let style_args = game_over_layer_style_args(false);
 
     html! {
         <div hidden=true class="gameover lost" style={style_args}>
-            <NewGameButton onclick={props.onclick.clone()} button_text={"Start Over"} disabled={true}/>
+            <NewGameButton onclick={props.new_game_callback.clone()} button_text={"Start Over"} disabled={true}/>
         </div>
     }
 }
 
-fn game_over_layer_style_args() -> String {
+fn game_over_layer_style_args(victory: bool) -> String {
+    let layer_color = if victory {COLORS.text_light} else {COLORS.button_hover};
+
     format!("--game_over: {}{};
               --game_over_hidden: {}00;
               --button_border_hidden: {}00;
               --button_background_hidden: {}00;
               --button_text_hidden: {}00;
               --fade_in_duration: {}s; --fade_in_delay: {}s;",
-              COLORS.text_light, COLORS.opacity,
+              layer_color, COLORS.opacity,
               COLORS.text_light,
               COLORS.text_dark,
               COLORS.button,

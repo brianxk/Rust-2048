@@ -169,6 +169,10 @@ table {
     color: var(--button_text_hidden);
 }
 
+.gameover[hidden] > .metadata:hover {
+    cursor: default;
+}
+
 .gameover:not([hidden]) {
     background-color: var(--game_over);
 }
