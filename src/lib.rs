@@ -7,7 +7,7 @@ const NUM_TILES: usize = BOARD_DIMENSION * BOARD_DIMENSION;
 
 // TODO:
 // 21072
-// 0. Game over code.
+// 0. Disable remaining keyboard inputs on new game.
 // 1. Update project description with link to game.
 // 2. Acknowledgements.
 // 3. Include link to source code.
@@ -133,7 +133,7 @@ impl Game {
     /// This means that the board will be empty save for two starting tiles.
     ///
     /// The two tiles will either both be 2's or one 2 and one 4, always in random positions.
-    const WINNING_TILE: u32 = 4;
+    const WINNING_TILE: u32 = 2048;
 
     pub fn new() -> Game {
         const EMPTY_TILE: Option<Tile> = None;

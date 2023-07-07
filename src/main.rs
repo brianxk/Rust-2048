@@ -1,4 +1,5 @@
 use core::time::Duration;
+use gloo::utils::document;
 use gloo_console::log;
 use lazy_static::lazy_static;
 use rust_2048::*;
@@ -130,10 +131,10 @@ fn handle_game_over(game_won: bool, keydown_handler: Arc<Closure<dyn FnMut(yew::
     let game_over_layer = game_over_layer.dyn_ref::<HtmlElement>().unwrap();
 
     game_over_layer.remove_attribute("hidden").expect("Failed to remove hidden attribute.");
-    game_over_layer.style().set_property("z-index", "4");
+    game_over_layer.style().set_property("z-index", "4").unwrap();
 
     // Enable buttons on gameover layer.
-    match document.query_selector_all(&format!("{}>button", game_over_type)) {
+    match document.query_selector_all(&format!("{}>div.buttons>button", game_over_type)) {
         Ok(node_list) => {
             for i in 0..node_list.length() {
                 let node = node_list.get(i).unwrap();
@@ -390,7 +391,8 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
 
                     log!("Inputs remaining:", input_counter.load(Ordering::SeqCst));
 
-                    // Consume keyboard inputs remaining in the message queue.
+                    // let keydown_rx_clone = Arc::new(RefCell::new(keydown_rx));
+                    // consume_keyboard_inputs(input_counter.clone(), keydown_rx_clone);
                     while input_counter.load(Ordering::SeqCst) > 0 && matches!(keydown_rx.recv().await, Some(_)) {
                         decrement_counter(input_counter.clone());
                     }
@@ -445,6 +447,14 @@ fn new_game_callback(new_game_hook: UseStateHandle<u32>) -> Callback<MouseEvent>
     })
 }
 
+async fn consume_keyboard_inputs(input_counter: Arc<AtomicU16>, keydown_rx: Arc<RefCell<UnboundedReceiver<String>>>) {
+    let mut keydown_rx_mut = keydown_rx.borrow_mut();
+
+    while input_counter.load(Ordering::SeqCst) > 0 && matches!(keydown_rx_mut.recv().await, Some(_)) {
+        decrement_counter(input_counter.clone());
+    }
+}
+
 fn increment_counter(input_counter: Arc<AtomicU16>) {
     log!("Incrementing", input_counter.load(Ordering::SeqCst));
     input_counter.fetch_add(1, Ordering::SeqCst);
@@ -493,22 +503,22 @@ fn content() -> Html {
         let transition_handler = Closure::wrap(Box::new(move |event: TransitionEvent| {
             let event_target = event.target().unwrap();
             let target_element = event_target.dyn_ref::<HtmlElement>().unwrap();
-            let parent_element = target_element.parent_element().unwrap();
 
-            let class_list = parent_element.class_list();
+            let target_element_class = target_element.class_name();
+            let target_element_classes = target_element_class.split(" ");
+            let mut target_element_selector = String::new();
 
-            let mut parent_is_gameover = false;
-
-            for i in 0..class_list.length() {
-
-                if class_list.get(i).unwrap() == "gameover" {
-                    parent_is_gameover = true;
-                    break
-                }
+            for class in target_element_classes {
+                target_element_selector = format!("{}.{}", target_element_selector, class);
             }
 
-            if parent_is_gameover {
+            if target_element.class_name() == "metadata" {
                 target_element.style().set_property("transition", "var(--hover_transition_duration) background-color").unwrap();
+            } else if target_element_selector == ".gameover.won" || target_element_selector == ".gameover.lost" {
+                let text_selector = format!("{}>.text", target_element_selector);
+                let text_node = document().query_selector(&text_selector).unwrap().unwrap();
+                let text_element = text_node.dyn_ref::<HtmlElement>().unwrap();
+                text_element.class_list().add_1("gameover_typed").unwrap();
             }
         }) as Box<dyn FnMut(TransitionEvent)>);
 
@@ -639,8 +649,11 @@ fn game_won_layer(props: &GameOverProps) -> Html {
 
     html! {
         <div hidden=true class="gameover won" style={style_args}>
-            <NewGameButton onclick={props.keep_playing_callback.clone()} button_text={"Keep Playing"} disabled={true}/>
-            <NewGameButton onclick={props.new_game_callback.clone()} button_text={"Start Over"} disabled={true}/>
+            <div class="text">{"VICTORY"}</div>
+            <div class="buttons">
+                <NewGameButton onclick={props.keep_playing_callback.clone()} button_text={"Keep Playing"} disabled={true}/>
+                <NewGameButton onclick={props.new_game_callback.clone()} button_text={"Start Over"} disabled={true}/>
+            </div>
         </div>
     }
 }
@@ -651,26 +664,33 @@ fn game_lost_layer(props: &GameOverProps) -> Html {
 
     html! {
         <div hidden=true class="gameover lost" style={style_args}>
-            <NewGameButton onclick={props.new_game_callback.clone()} button_text={"Start Over"} disabled={true}/>
+            <div class="text">{"DEFEAT"}</div>
+            <div class="buttons">
+                <NewGameButton onclick={props.new_game_callback.clone()} button_text={"Start Over"} disabled={true}/>
+            </div>
         </div>
     }
 }
 
 fn game_over_layer_style_args(victory: bool) -> String {
-    let layer_color = if victory {COLORS.text_light} else {COLORS.button_hover};
+    let (layer_color, text_color) = if victory {(COLORS.text_light, COLORS.text_dark)} else {(COLORS.button_hover, COLORS.text_dark)};
 
     format!("--game_over: {}{};
               --game_over_hidden: {}00;
               --button_border_hidden: {}00;
               --button_background_hidden: {}00;
               --button_text_hidden: {}00;
+              --game_over_text: {};
+              --game_over_text_hidden: {}00;
               --fade_in_duration: {}s; --fade_in_delay: {}s;",
               layer_color, COLORS.opacity,
               COLORS.text_light,
               COLORS.text_dark,
               COLORS.button,
               COLORS.text_dark,
-              0.3, 0.9,
+              text_color,
+              text_color,
+              0.5, 0.5
             )
 }
 
