@@ -11,7 +11,6 @@ use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::{JsCast, closure::Closure};
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{HtmlElement, window, CssAnimation, AnimationPlayState};
-use yew::html::ImplicitClone;
 use yew::platform::time::sleep;
 use yew::prelude::*;
 
@@ -128,7 +127,24 @@ fn handle_game_over(game_won: bool, keydown_handler: Arc<Closure<dyn FnMut(yew::
     }
 
     let game_over_layer = document.query_selector(&game_over_type).unwrap().unwrap();
+    let game_over_layer = game_over_layer.dyn_ref::<HtmlElement>().unwrap();
+
     game_over_layer.remove_attribute("hidden").expect("Failed to remove hidden attribute.");
+    game_over_layer.style().set_property("z-index", "4");
+
+    // Enable buttons on gameover layer.
+    match document.query_selector_all(&format!("{}>button", game_over_type)) {
+        Ok(node_list) => {
+            for i in 0..node_list.length() {
+                let node = node_list.get(i).unwrap();
+                let html_node = node.dyn_ref::<HtmlElement>().unwrap();
+                html_node.remove_attribute("disabled").unwrap();
+            }
+        },
+        Err(_) => {
+            log!("Error obtaining button.metadata");
+        }
+    }
 }
 
 fn remove_tile(id: usize) {
@@ -369,6 +385,7 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
                 }
 
                 if game_state_mut.game_over() || game_won {
+                // if true || game_won {
                     document.remove_event_listener_with_callback("keydown", Closure::as_ref(&keydown_handler).unchecked_ref()).unwrap();
 
                     log!("Inputs remaining:", input_counter.load(Ordering::SeqCst));
@@ -453,39 +470,41 @@ fn content() -> Html {
         }
     });
 
-    // Add event listener for sliding animation end - update inner html value.
-    // Logic for this animation can be found in fn slide_tile().
+    // Set transitionend listener for when game over layer transitions from hidden to visible.
+    // The transition property for the buttons must be overwritten to allow for their color to
+    // change when hovered over.
     use_effect(move || {
         let body = gloo::utils::body();
-        let merge_expand = Closure::wrap(Box::new(move |event: AnimationEvent| {
-            if event.animation_name() == "sliding" {
-                if event.type_() == "animationcancel" {
-                    log!(format!("{} was canceled.", event.animation_name()));
-                } else if event.type_() == "animationend" {
-                    log!("{} was finished.", event.animation_name());
-                }
-                let event_target = event.target().expect("No event target found.");
-                let html_tile = event_target.dyn_ref::<HtmlElement>().unwrap();
 
-                match html_tile.style().get_property_value("--merged_value") {
-                    Ok(merged_value) => {
-                        if !merged_value.is_empty() {
-                        }
-                    },
-                    Err(_) => (),
+        let transition_handler = Closure::wrap(Box::new(move |event: TransitionEvent| {
+            let event_target = event.target().unwrap();
+            let target_element = event_target.dyn_ref::<HtmlElement>().unwrap();
+            let parent_element = target_element.parent_element().unwrap();
+
+            let class_list = parent_element.class_list();
+
+            let mut parent_is_gameover = false;
+
+            for i in 0..class_list.length() {
+
+                if class_list.get(i).unwrap() == "gameover" {
+                    parent_is_gameover = true;
+                    break
                 }
             }
-        }) as Box<dyn FnMut(AnimationEvent)>);
-        
-        // body.add_event_listener_with_callback("animationend", merge_expand.as_ref().unchecked_ref()).unwrap();
-        // body.add_event_listener_with_callback("animationcancel", merge_expand.as_ref().unchecked_ref()).unwrap();
+
+            if parent_is_gameover {
+                target_element.style().set_property("transition", "var(--hover_transition_duration) background-color").unwrap();
+            }
+        }) as Box<dyn FnMut(TransitionEvent)>);
+
+        body.add_event_listener_with_callback("transitionend", transition_handler.as_ref().unchecked_ref()).unwrap();
 
         || {
-            // Must remove the callback or else memory leak will occur each time New Game is clicked.
-            // let body = gloo::utils::body();
-            // body.remove_event_listener_with_callback("animationend", merge_expand.as_ref().unchecked_ref()).unwrap();
-            // body.remove_event_listener_with_callback("animationcancel", merge_expand.as_ref().unchecked_ref()).unwrap();
-            drop(merge_expand)
+            let body = gloo::utils::body();
+
+            body.remove_event_listener_with_callback("transitionend", transition_handler.as_ref().unchecked_ref()).unwrap();
+            drop(transition_handler)
         }
     });
 
@@ -528,23 +547,6 @@ fn content() -> Html {
     }
 }
 
-#[derive(PartialEq, Clone)]
-struct MetadataProps {
-    button_border: String,
-    button_background: String,
-    button_text: String,
-    button_hover: String,
-}
-
-fn create_default_metadata_props() -> MetadataProps {
-    MetadataProps {
-        button_border: COLORS.text_dark.to_string(),
-        button_background: COLORS.button.to_string(),
-        button_text: COLORS.text_dark.to_string(),
-        button_hover: COLORS.button_hover.to_string(),
-    }
-}
-
 #[derive(Properties, PartialEq)]
 struct MetadataContainerProps {
     onclick: Callback<MouseEvent>,
@@ -556,7 +558,7 @@ fn metadata_container(props: &MetadataContainerProps) -> Html {
     html! {
         <div class="metadata-container">
             <Score score={props.score}/>
-            <NewGameButton onclick={props.onclick.clone()} button_text={"New Game"}/>
+            <NewGameButton onclick={props.onclick.clone()} button_text={"New Game"} disabled={false}/>
         </div>
     }
 }
@@ -564,8 +566,6 @@ fn metadata_container(props: &MetadataContainerProps) -> Html {
 #[derive(Properties, PartialEq)]
 struct ScoreProps {
     score: u32,
-    #[prop_or_else(create_default_metadata_props)]
-    metadata_props: MetadataProps,
 }
 
 #[function_component(Score)]
@@ -573,9 +573,9 @@ fn score(props: &ScoreProps) -> Html {
     let style_args = format!("--button_border: {};
                               --button_background: {};
                               --button_text: {};",
-                              props.metadata_props.button_border,
-                              props.metadata_props.button_background,
-                              props.metadata_props.button_text,
+                              COLORS.text_dark,
+                              COLORS.button,
+                              COLORS.text_dark,
                               );
 
     html! {
@@ -587,8 +587,7 @@ fn score(props: &ScoreProps) -> Html {
 struct NewGameProps {
     onclick: Callback<MouseEvent>,
     button_text: String,
-    #[prop_or_else(create_default_metadata_props)]
-    metadata_props: MetadataProps,
+    disabled: bool,
 }
 
 #[function_component(NewGameButton)]
@@ -596,15 +595,17 @@ fn new_game_button(props: &NewGameProps) -> Html {
     let style_args = format!("--button_border: {};
                               --button_background: {};
                               --button_text: {};
-                              --button_hover: {};",
-                              props.metadata_props.button_border,
-                              props.metadata_props.button_background,
-                              props.metadata_props.button_text,
-                              props.metadata_props.button_hover,
+                              --button_hover: {};
+                              --hover_transition_duration: {}s",
+                              COLORS.text_dark,
+                              COLORS.button,
+                              COLORS.text_dark,
+                              COLORS.button_hover,
+                              0.20,
                               );
 
     html! {
-        <button class="metadata" onclick={props.onclick.clone()} style={style_args}>{ &props.button_text }</button>
+        <button class="metadata" onclick={props.onclick.clone()} disabled={props.disabled} style={style_args}>{ &props.button_text }</button>
     }
 }
 
@@ -615,35 +616,51 @@ struct GameOverProps {
 
 #[function_component(GameWonLayer)]
 fn game_won_layer(props: &GameOverProps) -> Html {
-    let style_args = format!("--game_over_color: {};", COLORS.text_light);
+    let style_args = game_over_layer_style_args();
 
     html! {
         <div hidden=true class="gameover won" style={style_args}>
-            <NewGameButton onclick={props.onclick.clone()} button_text={"Start Over"}/>
+            <NewGameButton onclick={props.onclick.clone()} button_text={"Start Over"} disabled={true}/>
+            <NewGameButton onclick={props.onclick.clone()} button_text={"Keep Playing"} disabled={true}/>
         </div>
     }
 }
 
 #[function_component(GameLostLayer)]
 fn game_lost_layer(props: &GameOverProps) -> Html {
-    let style_args = format!("--game_over_color: {};", COLORS.button_hover);
+    let style_args = game_over_layer_style_args();
 
     html! {
         <div hidden=true class="gameover lost" style={style_args}>
-            <NewGameButton onclick={props.onclick.clone()} button_text={"Start Over"}/>
+            <NewGameButton onclick={props.onclick.clone()} button_text={"Start Over"} disabled={true}/>
         </div>
     }
+}
+
+fn game_over_layer_style_args() -> String {
+    format!("--game_over: {}{};
+              --game_over_hidden: {}00;
+              --button_border_hidden: {}00;
+              --button_background_hidden: {}00;
+              --button_text_hidden: {}00;
+              --fade_in_duration: {}s; --fade_in_delay: {}s;",
+              COLORS.text_light, COLORS.opacity,
+              COLORS.text_light,
+              COLORS.text_dark,
+              COLORS.button,
+              COLORS.text_dark,
+              0.3, 0.9,
+            )
 }
 
 #[function_component(Header)]
 fn header() -> Html {
     let header_style = format!("--header_text: {}", COLORS.text_light);
-    let cursor_style = format!("--blinking_cursor: {}", COLORS.text_light);
 
     html! {
         <div class="header" style={header_style}>
             <br/>
-            <div class="typed" style={cursor_style}>{ "Welcome to 2048!" }</div>
+            <div class="typed">{ "Welcome to 2048!" }</div>
         </div>
     }
 }

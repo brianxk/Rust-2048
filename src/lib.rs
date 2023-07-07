@@ -86,6 +86,7 @@ pub struct Colors {
     pub button_hover: &'static str,
     pub board: &'static str,
     pub cell: &'static str,
+    pub opacity: &'static str,
     // Tile's color will be determined within the `Game` struct based on the Tile's individual value.
 }
 
@@ -100,6 +101,8 @@ impl Colors {
             button_hover: "#b4ddcf",
             board: "#022244",
             cell: "#92cdb9",
+            // opacity is meant to be appended to any of the above colors, so is not prepended with #.
+            opacity: "99", // Equivalent to opacity: 0.6;
         }
     }
 }
@@ -130,7 +133,7 @@ impl Game {
     /// This means that the board will be empty save for two starting tiles.
     ///
     /// The two tiles will either both be 2's or one 2 and one 4, always in random positions.
-    const WINNING_TILE: u32 = 2048;
+    const WINNING_TILE: u32 = 4;
 
     pub fn new() -> Game {
         const EMPTY_TILE: Option<Tile> = None;

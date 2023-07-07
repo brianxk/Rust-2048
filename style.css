@@ -47,10 +47,12 @@ div.metadata-container {
     text-align: center;
     line-height: 35px;
     color: var(--button_text);
+    transition: var(--hover_transition_duration) background-color;
 }
 
 button.metadata:hover {
     background-color: var(--button_hover);
+    cursor: pointer;
 }
 
 div.metadata-container > div {
@@ -135,35 +137,58 @@ table {
   }
 }
 
-.gameover[hidden] {
-    opacity: 0;
-    display: block;
-}
-
-.gameover:not([hidden]) {
-    opacity: 0.6;
-}
-
 .gameover {
     position: absolute;
     top: 0;
     left: 0;
-    z-index: 3;
     width: 500px;
     height: 500px;
     border-radius: 10px;
-    background-color: var(--game_over_color);
-    transition: opacity 0.9s ease-in 0.5s;
-    /* display: flex; */
-    /* justify-content: center; */
-    /* align-items: center; */
+    transition: background-color var(--fade_in_duration) ease-in var(--fade_in_delay);
+    justify-content: center;
+    display: flex;
+    align-items: center;
+}
+
+.gameover > .metadata {
+    position: relative;
+    width: 150px;
+    margin: 15px;
+    display: inline-block;
+    transition: all var(--fade_in_duration) ease-in var(--fade_in_delay);
+}
+
+.gameover[hidden] {
+    background-color: var(--game_over_hidden);
+    display: block;
+}
+
+.gameover[hidden] > .metadata {
+    background-color: var(--button_background_hidden);
+    border: solid 1px var(--button_border_hidden);
+    color: var(--button_text_hidden);
+}
+
+.gameover:not([hidden]) {
+    background-color: var(--game_over);
+}
+
+.gameover:not([hidden]) > .metadata {
+    background-color: var(--button_background);
+    border: solid 1px var(--button_border);
+    color: var(--button_text);
+}
+
+.gameover:not([hidden]) > .metadata:hover {
+    background-color: var(--button_hover);
+    cursor: pointer;
 }
 
 .typed {
     overflow: hidden;
     white-space: nowrap;
     border-right: 2px solid;
-    border-right-color: var(--blinking_cursor);
+    border-right-color: var(--header_text);
     width: 0;
     animation: typing 1.5s steps(30, end) forwards, blinking 1.25s steps(2) infinite;
 }
