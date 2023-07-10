@@ -8,6 +8,7 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::task;
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::{JsCast, closure::Closure};
 use wasm_bindgen_futures::spawn_local;
@@ -361,11 +362,15 @@ fn slide_tiles(node_list: web_sys::NodeList, tiles: &Vec<&rust_2048::Tile>) -> V
     removed_tile_ids
 }
 
-async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx: UnboundedReceiver<String>, input_counter: Arc<AtomicU16>, keydown_handler: Arc<Closure<dyn FnMut(yew::KeyboardEvent)>>) {
+async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx: UnboundedReceiver<String>, mut re_render_rx: UnboundedReceiver<&str>, input_counter: Arc<AtomicU16>, keydown_handler: Arc<Closure<dyn FnMut(yew::KeyboardEvent)>>) {
     let game_state_mut = game_state.clone();
     let mut game_state_mut = game_state_mut.borrow_mut();
 
     while let Some(key_code) = keydown_rx.recv().await {
+        // if let Ok(_) = re_render_rx.try_recv() {
+        //     break
+        // }
+
         match game_state_mut.receive_input(&key_code) {
             InputResult::Ok(new_tile_id, tiles, game_won) => {
                 let document = gloo::utils::document();
@@ -391,8 +396,6 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
 
                     log!("Inputs remaining:", input_counter.load(Ordering::SeqCst));
 
-                    // let keydown_rx_clone = Arc::new(RefCell::new(keydown_rx));
-                    // consume_keyboard_inputs(input_counter.clone(), keydown_rx_clone);
                     while input_counter.load(Ordering::SeqCst) > 0 && matches!(keydown_rx.recv().await, Some(_)) {
                         decrement_counter(input_counter.clone());
                     }
@@ -427,32 +430,57 @@ fn keep_playing_callback(keydown_handler: Arc<Closure<dyn FnMut(yew::KeyboardEve
     })
 }
 
-fn new_game_callback(new_game_hook: UseStateHandle<u32>) -> Callback<MouseEvent> {
+fn new_game_callback(new_game_hook: UseStateHandle<u32>, re_render_tx: UnboundedSender<&'static str>) -> Callback<MouseEvent> {
     Callback::from(move |_| {
         // Elements manipulated manually using web_sys do not get removed when this component is re-rendered.
         // Must remove them manually here.
+
+        // Before removing elements from the DOM howevever, the keydown processor must be notified
+        // we are doing this. Otherwise it will continue to try to perform logic and animations on
+        // frontend elements that were removed, resulting in panic.
+        // re_render_tx.send("").expect("Failed to send re-render signal.");
+
         let document = gloo::utils::document();
-        match document.query_selector_all("[class='tile cell']") {
-            Ok(node_list) => {
-                for i in 0..node_list.length() {
-                    let element = node_list.get(i).unwrap();
-                    let element = element.dyn_ref::<HtmlElement>().unwrap();
-                    element.remove();
-                }
-            },
-            Err(_) => log!("Tiles could not be found."),
-        }
+        let bc = document.query_selector(".board-container").unwrap().unwrap();
+        let bc = bc.dyn_ref::<HtmlElement>().unwrap();
+        bc.remove();
+        // match document.query_selector_all("[class='tile cell']") {
+        //     Ok(node_list) => {
+        //         for i in 0..node_list.length() {
+        //             let element = node_list.get(i).unwrap();
+        //             let element = element.dyn_ref::<HtmlElement>().unwrap();
+        //             element.remove();
+        //         }
+        //     },
+        //     Err(_) => log!("Tiles could not be found."),
+        // }
 
         new_game_hook.set(*new_game_hook + 1);
     })
 }
 
-async fn consume_keyboard_inputs(input_counter: Arc<AtomicU16>, keydown_rx: Arc<RefCell<UnboundedReceiver<String>>>) {
-    let mut keydown_rx_mut = keydown_rx.borrow_mut();
+fn transition_callback() -> Closure<dyn FnMut(web_sys::TransitionEvent)> {
+    Closure::wrap(Box::new(move |event: TransitionEvent| {
+        let event_target = event.target().unwrap();
+        let target_element = event_target.dyn_ref::<HtmlElement>().unwrap();
 
-    while input_counter.load(Ordering::SeqCst) > 0 && matches!(keydown_rx_mut.recv().await, Some(_)) {
-        decrement_counter(input_counter.clone());
-    }
+        let target_element_class = target_element.class_name();
+        let target_element_classes = target_element_class.split(" ");
+        let mut target_element_selector = String::new();
+
+        for class in target_element_classes {
+            target_element_selector = format!("{}.{}", target_element_selector, class);
+        }
+
+        if target_element.class_name() == "metadata" {
+            target_element.style().set_property("transition", "var(--hover_transition_duration) background-color").unwrap();
+        } else if target_element_selector == ".gameover.won" || target_element_selector == ".gameover.lost" {
+            let text_selector = format!("{}>.text", target_element_selector);
+            let text_node = document().query_selector(&text_selector).unwrap().unwrap();
+            let text_element = text_node.dyn_ref::<HtmlElement>().unwrap();
+            text_element.class_list().add_1("gameover_typed").unwrap();
+        }
+    }) as Box<dyn FnMut(TransitionEvent)>)
 }
 
 fn increment_counter(input_counter: Arc<AtomicU16>) {
@@ -478,14 +506,19 @@ fn content() -> Html {
     let input_counter = Arc::new(AtomicU16::new(0));
 
     let keydown_handler = Arc::new(Closure::wrap(produce_keydown_handler(keydown_tx, input_counter.clone())));
-    let keydown_processor_clone = keydown_handler.clone();
+    let keydown_handler_clone = keydown_handler.clone();
     let keep_playing_clone = keydown_handler.clone();
+
+    // Channel for communicating to keydown processor that a re-render was triggered and to ignore
+    // all remaining keyboard inputs in queue.
+    let (re_render_tx, re_render_rx) = mpsc::unbounded_channel();
+
+    spawn_local(process_keydown_messages(game_state_for_move_processor, keydown_rx, re_render_rx, input_counter.clone(), keydown_handler_clone));
 
     use_effect(move || {
         let document = gloo::utils::document();
         document.add_event_listener_with_callback("keydown", Closure::as_ref(&keydown_handler).unchecked_ref()).unwrap();
 
-        spawn_local(process_keydown_messages(game_state_for_move_processor, keydown_rx, input_counter.clone(), keydown_processor_clone));
 
         || {
             let document = gloo::utils::document();
@@ -500,35 +533,15 @@ fn content() -> Html {
     use_effect(move || {
         let body = gloo::utils::body();
 
-        let transition_handler = Closure::wrap(Box::new(move |event: TransitionEvent| {
-            let event_target = event.target().unwrap();
-            let target_element = event_target.dyn_ref::<HtmlElement>().unwrap();
+        let transition_callback = transition_callback();
 
-            let target_element_class = target_element.class_name();
-            let target_element_classes = target_element_class.split(" ");
-            let mut target_element_selector = String::new();
-
-            for class in target_element_classes {
-                target_element_selector = format!("{}.{}", target_element_selector, class);
-            }
-
-            if target_element.class_name() == "metadata" {
-                target_element.style().set_property("transition", "var(--hover_transition_duration) background-color").unwrap();
-            } else if target_element_selector == ".gameover.won" || target_element_selector == ".gameover.lost" {
-                let text_selector = format!("{}>.text", target_element_selector);
-                let text_node = document().query_selector(&text_selector).unwrap().unwrap();
-                let text_element = text_node.dyn_ref::<HtmlElement>().unwrap();
-                text_element.class_list().add_1("gameover_typed").unwrap();
-            }
-        }) as Box<dyn FnMut(TransitionEvent)>);
-
-        body.add_event_listener_with_callback("transitionend", transition_handler.as_ref().unchecked_ref()).unwrap();
+        body.add_event_listener_with_callback("transitionend", transition_callback.as_ref().unchecked_ref()).unwrap();
 
         || {
             let body = gloo::utils::body();
 
-            body.remove_event_listener_with_callback("transitionend", transition_handler.as_ref().unchecked_ref()).unwrap();
-            drop(transition_handler)
+            body.remove_event_listener_with_callback("transitionend", transition_callback.as_ref().unchecked_ref()).unwrap();
+            drop(transition_callback)
         }
     });
 
@@ -536,7 +549,7 @@ fn content() -> Html {
     // The value is used as a key to each Tile component in order to its `expand-init` animation.
     let new_game = use_state(|| 0);
     let new_game_render = *new_game.clone();
-    let new_game_callback = new_game_callback(new_game.clone());
+    let new_game_callback = new_game_callback(new_game.clone(), re_render_tx);
     let keep_playing_callback = keep_playing_callback(keep_playing_clone);
     let placeholder_callback = Callback::from(|_| {});
 
@@ -690,7 +703,7 @@ fn game_over_layer_style_args(victory: bool) -> String {
               COLORS.text_dark,
               text_color,
               text_color,
-              0.5, 0.5
+              0.5, 0.0
             )
 }
 

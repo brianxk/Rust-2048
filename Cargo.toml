@@ -15,6 +15,6 @@ gloo = "0.8.0"
 web-sys = { version = "0.3.64", features = ["CssStyleDeclaration", "DomTokenList", "Element", "HtmlElement", "Document", "Node", "NodeList", "AnimationEvent", "CssAnimation", "Animation", "AnimationPlayState", "KeyboardEvent"]}
 hex_color = "2.0.0"
 wasm-bindgen-futures = "0.4.37"
-tokio = { version="1.29.0", features = ["sync"] }
+tokio = { version="1.29.0", features = ["sync", "rt"] }
 lazy_static = "1.4.0"
 
