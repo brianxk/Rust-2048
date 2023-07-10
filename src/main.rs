@@ -541,7 +541,7 @@ fn content() -> Html {
     let placeholder_callback = Callback::from(|_| {});
 
     html! {
-        <div class="content" key={new_game_render}>
+        <div class="content noselect" key={new_game_render}>
             <MetadataContainer score={0} onclick={&new_game_callback}/>
             <div class="board-container">
                 <GameBoard/>
