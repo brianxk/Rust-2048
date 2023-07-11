@@ -90,8 +90,18 @@ fn tile(props: &TileProps) -> Html {
 }
 
 fn set_animation_durations(input_counter: Arc<AtomicU16>) {
-    // *CURRENT_SLIDE_DURATION.lock().unwrap() = duration / divisor;
-    // *CURRENT_EXPAND_DURATION.lock().unwrap() = duration / divisor;
+    let enqueued_keystrokes = input_counter.load(Ordering::SeqCst);
+
+    let mut slide_duration = DEFAULT_SLIDE_DURATION;
+    let mut expand_duration = DEFAULT_EXPAND_DURATION;
+
+    if enqueued_keystrokes > 0 {
+        slide_duration /= enqueued_keystrokes as u64;
+        expand_duration /= enqueued_keystrokes as u64;
+    }
+
+    *CURRENT_SLIDE_DURATION.lock().unwrap() = slide_duration;
+    *CURRENT_EXPAND_DURATION.lock().unwrap() = expand_duration;
 }
 
 fn handle_game_over(game_won: bool, keydown_handler: Arc<Closure<dyn FnMut(yew::KeyboardEvent)>>) {
@@ -318,6 +328,7 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
                         let mut now = instant::Instant::now();
 
                         let num_elements_slide = node_list.length() as u16;
+                        set_animation_durations(input_counter.clone());
                         let (removed_ids, num_merged) = slide_tiles(node_list, &tiles);
                         animationend_rx.recv_qty(num_elements_slide).await;
                         remove_tiles(removed_ids);
@@ -325,6 +336,7 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
                         log!(format!("{:?}", instant::Instant::now() - now));
 
                         decrement_counter(input_counter.clone());
+                        set_animation_durations(input_counter.clone());
 
                         now = instant::Instant::now();
                         animationend_rx.recv_qty(num_merged).await;
