@@ -1,3 +1,4 @@
+#![allow(non_camel_case_types)]
 use gloo::utils::document;
 use gloo_console::log;
 use lazy_static::lazy_static;
@@ -10,10 +11,8 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::{JsCast, closure::Closure};
 use wasm_bindgen_futures::spawn_local;
-use web_sys::{HtmlElement, window, CssAnimation, AnimationPlayState};
-use yew::platform::time::sleep;
+use web_sys::{HtmlElement, window, CssAnimation, Element};
 use yew::prelude::*;
-use core::time::Duration;
 mod counted_channel;
 
 const BORDER_SPACING: u16 = 4;
@@ -87,21 +86,6 @@ fn tile(props: &TileProps) -> Html {
     html! {
         <div id={tile_id} class="tile cell" style={style_args}>{props.value}</div>
     }
-}
-
-fn set_animation_durations(input_counter: Arc<AtomicU16>) {
-    let enqueued_keystrokes = input_counter.load(Ordering::SeqCst);
-
-    let mut slide_duration = DEFAULT_SLIDE_DURATION;
-    let mut expand_duration = DEFAULT_EXPAND_DURATION;
-
-    if enqueued_keystrokes > 0 {
-        slide_duration /= enqueued_keystrokes as u64;
-        expand_duration /= enqueued_keystrokes as u64;
-    }
-
-    *CURRENT_SLIDE_DURATION.lock().unwrap() = slide_duration;
-    *CURRENT_EXPAND_DURATION.lock().unwrap() = expand_duration;
 }
 
 fn handle_game_over(game_won: bool, keydown_handler: Arc<Closure<dyn FnMut(yew::KeyboardEvent)>>) {
@@ -325,24 +309,24 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
 
                 match document.query_selector_all("[class='tile cell']") {
                     Ok(node_list) => {
-                        let mut now = instant::Instant::now();
-
+                        // let mut now = instant::Instant::now();
                         let num_elements_slide = node_list.length() as u16;
-                        set_animation_durations(input_counter.clone());
+                        
+                        set_animation_durations(input_counter.clone(), 1);
                         let (removed_ids, num_merged) = slide_tiles(node_list, &tiles);
                         animationend_rx.recv_qty(num_elements_slide).await;
                         remove_tiles(removed_ids);
 
-                        log!(format!("{:?}", instant::Instant::now() - now));
+                        // log!(format!("{:?}", instant::Instant::now() - now));
 
                         decrement_counter(input_counter.clone());
-                        set_animation_durations(input_counter.clone());
+                        set_animation_durations(input_counter.clone(), 0);
 
-                        now = instant::Instant::now();
-                        animationend_rx.recv_qty(num_merged).await;
-                        log!(format!("{:?}", instant::Instant::now() - now));
-
+                        // now = instant::Instant::now();
                         add_tile(get_tile_by_id(&tiles, new_tile_id).expect("Failed to find new Tile."));
+                        animationend_rx.recv_qty(num_merged).await;
+                        // log!(format!("{:?}", instant::Instant::now() - now));
+
                         update_score(game_state_mut.score);
                     },
                     Err(_) => log!("NodeList could not be found."),
@@ -368,10 +352,61 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
     }
 }
 
+fn set_animation_durations(input_counter: Arc<AtomicU16>, threshold: u16) {
+    let enqueued_keystrokes = input_counter.load(Ordering::SeqCst);
+
+    let mut slide_duration = DEFAULT_SLIDE_DURATION;
+    let mut expand_duration = DEFAULT_EXPAND_DURATION;
+
+    // if enqueued_keystrokes > 1 {
+    //     slide_duration /= enqueued_keystrokes as u64;
+    //     expand_duration /= enqueued_keystrokes as u64;
+    // } else 
+    if enqueued_keystrokes > threshold {
+        slide_duration = 0;
+        expand_duration = 0;
+    }
+
+    *CURRENT_SLIDE_DURATION.lock().unwrap() = slide_duration;
+    *CURRENT_EXPAND_DURATION.lock().unwrap() = expand_duration;
+}
+
+fn interrupt_playback_rate(input_counter: Arc<AtomicU16>) {
+    let document = gloo::utils::document();
+
+    match document.query_selector_all("[class='tile cell']") {
+        Ok(node_list) => {
+            for i in 0..node_list.length() {
+                let node = node_list.get(i).unwrap();
+                let element = node.dyn_ref::<Element>().unwrap();
+                // #[cfg(web_sys_unstable_apis)]
+                let animations = element.get_animations();
+
+                for animation in animations {
+                    let animation = CssAnimation::from(animation);
+                    let current_time = animation.current_time();
+
+                    log!(current_time);
+
+                    if input_counter.load(Ordering::SeqCst) > 1 {
+                        animation.set_playback_rate(5.0);
+                    }
+
+                    // let animation_name = animation.animation_name();
+                    // let playback_rate = animation.playback_rate();
+                    // log!(animation_name, playback_rate);
+                }
+            }
+        },
+        Err(_) => log!("NodeList could not be found."),
+    }
+}
+
 fn produce_keydown_handler(keydown_tx: UnboundedSender<String>, input_counter: Arc<AtomicU16>) -> Box<dyn FnMut(KeyboardEvent) -> ()> {
     Box::new(move |event: KeyboardEvent| {
         let key_code = event.code();
         increment_counter(input_counter.clone());
+        interrupt_playback_rate(input_counter.clone());
         keydown_tx.send(key_code).expect("Sending key_code failed.");
     })
 }
@@ -412,7 +447,7 @@ fn new_game_callback(new_game_hook: UseStateHandle<u32>) -> Callback<MouseEvent>
     })
 }
 
-fn animationend_callback(input_counter: Arc<AtomicU16>, animationend_tx: counted_channel::CountedSender) -> Closure<dyn FnMut(web_sys::AnimationEvent)> {
+fn animationend_callback(animationend_tx: counted_channel::CountedSender) -> Closure<dyn FnMut(web_sys::AnimationEvent)> {
     Closure::wrap(Box::new(move |event: AnimationEvent| {
         if event.animation_name() == "sliding" {
             if event.type_() == "animationcancel" {
@@ -424,8 +459,6 @@ fn animationend_callback(input_counter: Arc<AtomicU16>, animationend_tx: counted
 
             if let Ok(merged_value) = html_tile.style().get_property_value("--merged_value") {
                 if !merged_value.is_empty() {
-                    // remove_tile(html_tile.style().get_property_value("--remove_id").unwrap());
-                    // html_tile.style().remove_property("--remove_id").unwrap();
                     update_tile(&html_tile, &merged_value);
                     expand_tile(&html_tile);
                 }
@@ -514,7 +547,7 @@ fn content() -> Html {
     use_effect(move || {
         let body = gloo::utils::body();
 
-        let animationend_callback = animationend_callback(input_counter.clone(), animationend_tx);
+        let animationend_callback = animationend_callback(animationend_tx);
 
         body.add_event_listener_with_callback("animationend", animationend_callback.as_ref().unchecked_ref()).unwrap();
         body.add_event_listener_with_callback("animationcancel", animationend_callback.as_ref().unchecked_ref()).unwrap();

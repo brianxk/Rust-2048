@@ -12,10 +12,13 @@ getrandom = { version = "0.2.9", features = ["js"] }
 gloo-console = "0.2.3"
 wasm-bindgen = "0.2.86"
 gloo = "0.8.0"
-web-sys = { version = "0.3.64", features = ["CssStyleDeclaration", "DomTokenList", "Element", "HtmlElement", "Document", "Node", "NodeList", "AnimationEvent", "CssAnimation", "Animation", "AnimationPlayState", "KeyboardEvent"]}
+web-sys = { version = "0.3.64", features = ["CssStyleDeclaration", "DomTokenList", "Element", "HtmlElement", "Document", "Node", "NodeList", "AnimationEvent", "CssAnimation", "KeyboardEvent"]}
 hex_color = "2.0.0"
 wasm-bindgen-futures = "0.4.37"
-tokio = { version="1.29.0", features = ["sync", "rt"] }
+tokio = { version="1.29.0", features = ["sync"] }
 lazy_static = "1.4.0"
 instant = { version = "0.1", features = [ "wasm-bindgen" ] }
+
+[features]
+web_sys_unstable_apis = []
 
