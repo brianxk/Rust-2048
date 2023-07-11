@@ -1,4 +1,3 @@
-use core::time::Duration;
 use gloo::utils::document;
 use gloo_console::log;
 use lazy_static::lazy_static;
@@ -8,13 +7,14 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
-use tokio::task;
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::{JsCast, closure::Closure};
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{HtmlElement, window, CssAnimation, AnimationPlayState};
 use yew::platform::time::sleep;
 use yew::prelude::*;
+use core::time::Duration;
+mod counted_channel;
 
 const BORDER_SPACING: u16 = 4;
 const TILE_DIMENSION: u16 = 120;
@@ -89,30 +89,9 @@ fn tile(props: &TileProps) -> Html {
     }
 }
 
-fn set_animation_durations(input_counter: Arc<AtomicU16>, threshold: u16, duration: u64) -> (u64, u64) {
-    let pending_moves = input_counter.load(Ordering::SeqCst);
-    let divisor: u64;
-
-    if pending_moves > threshold {
-        divisor = (pending_moves + 1) as u64;
-    } else {
-        divisor = 1
-    }
-
-    *CURRENT_SLIDE_DURATION.lock().unwrap() = duration / divisor;
-    *CURRENT_EXPAND_DURATION.lock().unwrap() = duration / divisor;
-
-    // if pending_moves > threshold {
-    //     *CURRENT_SLIDE_DURATION.lock().unwrap() = 0;
-    //     *CURRENT_EXPAND_DURATION.lock().unwrap() = 0;
-    //     // *CURRENT_SLEEP_DURATION.lock().unwrap() = 20;
-    // } else {
-        // *CURRENT_SLIDE_DURATION.lock().unwrap() = duration / (pending_moves * 4) as u64;
-        // *CURRENT_EXPAND_DURATION.lock().unwrap() = duration / (pending_moves * 4) as u64;
-        // *CURRENT_SLEEP_DURATION.lock().unwrap() = duration;
-    // }
-
-    (*CURRENT_SLIDE_DURATION.lock().unwrap(), *CURRENT_EXPAND_DURATION.lock().unwrap())
+fn set_animation_durations(input_counter: Arc<AtomicU16>) {
+    // *CURRENT_SLIDE_DURATION.lock().unwrap() = duration / divisor;
+    // *CURRENT_EXPAND_DURATION.lock().unwrap() = duration / divisor;
 }
 
 fn handle_game_over(game_won: bool, keydown_handler: Arc<Closure<dyn FnMut(yew::KeyboardEvent)>>) {
@@ -162,47 +141,6 @@ fn update_score(new_score: u32) {
     let document = gloo::utils::document();
     let score_node = document.query_selector(".score").unwrap().unwrap();
     score_node.set_inner_html(&new_score.to_string());
-}
-
-/// Waits for the given animation to complete.
-async fn await_animations(animation_name: String) {
-    let document = gloo::utils::document();
-    let animations = document.get_animations();
-    let mut id = 0;
-
-    for animation in animations {
-        let animation = CssAnimation::from(animation);
-        if animation.animation_name() == animation_name {
-            let c_id = format!("_{}", id);
-            animation.set_id(&c_id);
-            let mut play_state = animation.play_state();
-
-            while !matches!(play_state, AnimationPlayState::Finished) {
-                // log!(&animation_name, "sleeping . . .");
-                sleep(Duration::from_millis(*CURRENT_SLEEP_DURATION.lock().unwrap())).await;
-                
-                let animations = document.get_animations();
-
-                let mut animation: Option<CssAnimation> = None;
-                for a in animations {
-                    let a = CssAnimation::from(a);
-                    if a.animation_name() == animation_name {
-                        if a.id() == c_id {
-                            animation = Some(a);
-                            break;
-                        }
-                    }
-                };
-
-                play_state = match animation {
-                    Some(a) => a.play_state(),
-                    None => break
-                }
-            }
-
-            id += 1;
-        }
-    }
 }
 
 fn remove_tiles(removed_tile_ids: Vec<usize>) {
@@ -282,9 +220,9 @@ fn update_tile(html_tile: &HtmlElement, merged_value: &String) {
     html_tile.style().set_property("color", &new_text_color).unwrap();
 
     // Reset all of these properties.
-    html_tile.style().set_property("--merged_value", "").expect("Failed to reset --merged_value to empty.");
-    html_tile.style().set_property("--background_color", "").unwrap();
-    html_tile.style().set_property("--text_color", "").unwrap();
+    html_tile.style().remove_property("--merged_value").unwrap();
+    html_tile.style().remove_property("--background_color").unwrap();
+    html_tile.style().remove_property("--text_color").unwrap();
 }
 
 fn expand_tile(html_tile: &HtmlElement) {
@@ -328,11 +266,12 @@ fn slide_tile(html_tile: &HtmlElement, game_tile: &rust_2048::Tile) {
     html_tile.style().set_property("left", &new_left_offset).unwrap();
 }
 
-/// Calls slide_tile() in a loop to move each tile into position. Returns a Vec containing the IDs
-/// of every Tile that needs to be deleted from the frontend.
-fn slide_tiles(node_list: web_sys::NodeList, tiles: &Vec<&rust_2048::Tile>) -> Vec<usize> {
+/// Calls slide_tile() in a loop to move each tile into position. Returns the number of merged tiles.
+fn slide_tiles(node_list: web_sys::NodeList, tiles: &Vec<&rust_2048::Tile>) -> (Vec<usize>, u16) {
     let document = gloo::utils::document();
-    let mut removed_tile_ids = Vec::new();
+
+    let mut removed_ids = Vec::new();
+    let mut num_merged = 0;
 
     for i in 0..node_list.length() {
         let node = node_list.get(i).unwrap();
@@ -346,45 +285,52 @@ fn slide_tiles(node_list: web_sys::NodeList, tiles: &Vec<&rust_2048::Tile>) -> V
             // into that position before deleting it, thereby ensuring animation integrity.
             // If the `merged` field is the `None` variant, that means that Tile was not merged.
             if let Some(removed_tile) = &updated_tile.merged {
+                removed_ids.push(removed_tile.id);
+                num_merged += 1;
+
                 let removed_html_node = document.query_selector(&convert_id_unicode(&removed_tile.id.to_string())).unwrap().unwrap();
                 let removed_html_tile = removed_html_node.dyn_ref::<HtmlElement>().unwrap();
 
                 slide_tile(removed_html_tile, removed_tile);
 
                 // Mark this tile for removal from the frontend.
-                removed_tile_ids.push(removed_tile.id);
+                html_tile.style().set_property("--remove_id", &removed_tile.id.to_string()).unwrap();
             }
 
             slide_tile(html_tile, updated_tile);
         }
     }
 
-    removed_tile_ids
+    (removed_ids, num_merged)
 }
 
-async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx: UnboundedReceiver<String>, mut re_render_rx: UnboundedReceiver<&str>, input_counter: Arc<AtomicU16>, keydown_handler: Arc<Closure<dyn FnMut(yew::KeyboardEvent)>>) {
+async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx: UnboundedReceiver<String>, mut animationend_rx: counted_channel::CountedReceiver, input_counter: Arc<AtomicU16>, keydown_handler: Arc<Closure<dyn FnMut(yew::KeyboardEvent)>>) {
     let game_state_mut = game_state.clone();
     let mut game_state_mut = game_state_mut.borrow_mut();
 
     while let Some(key_code) = keydown_rx.recv().await {
-        // if let Ok(_) = re_render_rx.try_recv() {
-        //     break
-        // }
-
         match game_state_mut.receive_input(&key_code) {
             InputResult::Ok(new_tile_id, tiles, game_won) => {
                 let document = gloo::utils::document();
 
                 match document.query_selector_all("[class='tile cell']") {
                     Ok(node_list) => {
-                        let removed_tile_ids;
-                        removed_tile_ids = slide_tiles(node_list, &tiles);
-                        sleep(Duration::from_millis(DEFAULT_SLIDE_DURATION)).await;
-                        remove_tiles(removed_tile_ids);
+                        let mut now = instant::Instant::now();
+
+                        let num_elements_slide = node_list.length() as u16;
+                        let (removed_ids, num_merged) = slide_tiles(node_list, &tiles);
+                        animationend_rx.recv_qty(num_elements_slide).await;
+                        remove_tiles(removed_ids);
+
+                        log!(format!("{:?}", instant::Instant::now() - now));
+
                         decrement_counter(input_counter.clone());
+
+                        now = instant::Instant::now();
+                        animationend_rx.recv_qty(num_merged).await;
+                        log!(format!("{:?}", instant::Instant::now() - now));
+
                         add_tile(get_tile_by_id(&tiles, new_tile_id).expect("Failed to find new Tile."));
-                        merge_tiles();
-                        sleep(Duration::from_millis(DEFAULT_EXPAND_DURATION)).await;
                         update_score(game_state_mut.score);
                     },
                     Err(_) => log!("NodeList could not be found."),
@@ -430,15 +376,10 @@ fn keep_playing_callback(keydown_handler: Arc<Closure<dyn FnMut(yew::KeyboardEve
     })
 }
 
-fn new_game_callback(new_game_hook: UseStateHandle<u32>, re_render_tx: UnboundedSender<&'static str>) -> Callback<MouseEvent> {
+fn new_game_callback(new_game_hook: UseStateHandle<u32>) -> Callback<MouseEvent> {
     Callback::from(move |_| {
         // Elements manipulated manually using web_sys do not get removed when this component is re-rendered.
         // Must remove them manually here.
-
-        // Before removing elements from the DOM howevever, the keydown processor must be notified
-        // we are doing this. Otherwise it will continue to try to perform logic and animations on
-        // frontend elements that were removed, resulting in panic.
-        // re_render_tx.send("").expect("Failed to send re-render signal.");
 
         let document = gloo::utils::document();
         let bc = document.query_selector(".board-container").unwrap().unwrap();
@@ -459,7 +400,35 @@ fn new_game_callback(new_game_hook: UseStateHandle<u32>, re_render_tx: Unbounded
     })
 }
 
-fn transition_callback() -> Closure<dyn FnMut(web_sys::TransitionEvent)> {
+fn animationend_callback(input_counter: Arc<AtomicU16>, animationend_tx: counted_channel::CountedSender) -> Closure<dyn FnMut(web_sys::AnimationEvent)> {
+    Closure::wrap(Box::new(move |event: AnimationEvent| {
+        if event.animation_name() == "sliding" {
+            if event.type_() == "animationcancel" {
+                log!("canceled");
+            }
+
+            let event_target = event.target().unwrap();
+            let html_tile = event_target.dyn_ref::<HtmlElement>().unwrap();
+
+            if let Ok(merged_value) = html_tile.style().get_property_value("--merged_value") {
+                if !merged_value.is_empty() {
+                    // remove_tile(html_tile.style().get_property_value("--remove_id").unwrap());
+                    // html_tile.style().remove_property("--remove_id").unwrap();
+                    update_tile(&html_tile, &merged_value);
+                    expand_tile(&html_tile);
+                }
+            }
+
+            animationend_tx.send(String::from(event.animation_name())).unwrap();
+        } else if event.animation_name() == "expand-merge" {
+            animationend_tx.send(String::from(event.animation_name())).unwrap();
+        }
+
+    }) as Box<dyn FnMut(AnimationEvent)>)
+
+}
+
+fn transitionend_callback() -> Closure<dyn FnMut(web_sys::TransitionEvent)> {
     Closure::wrap(Box::new(move |event: TransitionEvent| {
         let event_target = event.target().unwrap();
         let target_element = event_target.dyn_ref::<HtmlElement>().unwrap();
@@ -484,12 +453,12 @@ fn transition_callback() -> Closure<dyn FnMut(web_sys::TransitionEvent)> {
 }
 
 fn increment_counter(input_counter: Arc<AtomicU16>) {
-    log!("Incrementing", input_counter.load(Ordering::SeqCst));
+    // log!("Incrementing", input_counter.load(Ordering::SeqCst));
     input_counter.fetch_add(1, Ordering::SeqCst);
 }
 
 fn decrement_counter(input_counter: Arc<AtomicU16>) {
-    log!("Decrementing", input_counter.load(Ordering::SeqCst));
+    // log!("Decrementing", input_counter.load(Ordering::SeqCst));
     input_counter.fetch_sub(1, Ordering::SeqCst);
 }
 
@@ -509,11 +478,14 @@ fn content() -> Html {
     let keydown_handler_clone = keydown_handler.clone();
     let keep_playing_clone = keydown_handler.clone();
 
+    // Channel for animationend events to notify the keydown processor to process the next keystroke.
+    let (animationend_tx, animationend_rx) = counted_channel::CountedChannel::new();
+
     // Channel for communicating to keydown processor that a re-render was triggered and to ignore
     // all remaining keyboard inputs in queue.
-    let (re_render_tx, re_render_rx) = mpsc::unbounded_channel();
+    // let (re_render_tx, re_render_rx) = mpsc::unbounded_channel();
 
-    spawn_local(process_keydown_messages(game_state_for_move_processor, keydown_rx, re_render_rx, input_counter.clone(), keydown_handler_clone));
+    spawn_local(process_keydown_messages(game_state_for_move_processor, keydown_rx, animationend_rx, input_counter.clone(), keydown_handler_clone));
 
     use_effect(move || {
         let document = gloo::utils::document();
@@ -527,29 +499,43 @@ fn content() -> Html {
         }
     });
 
+    use_effect(move || {
+        let body = gloo::utils::body();
+
+        let animationend_callback = animationend_callback(input_counter.clone(), animationend_tx);
+
+        body.add_event_listener_with_callback("animationend", animationend_callback.as_ref().unchecked_ref()).unwrap();
+        body.add_event_listener_with_callback("animationcancel", animationend_callback.as_ref().unchecked_ref()).unwrap();
+
+        || {
+            let body = gloo::utils::body();
+            body.remove_event_listener_with_callback("animationend", animationend_callback.as_ref().unchecked_ref()).unwrap();
+            body.remove_event_listener_with_callback("animationcancel", animationend_callback.as_ref().unchecked_ref()).unwrap();
+            drop(animationend_callback)
+        }
+    });
+
     // Set transitionend listener for when game over layer transitions from hidden to visible.
     // The transition property for the buttons must be overwritten to allow for their color to
     // change when hovered over.
     use_effect(move || {
         let body = gloo::utils::body();
 
-        let transition_callback = transition_callback();
+        let transitionend_callback = transitionend_callback();
 
-        body.add_event_listener_with_callback("transitionend", transition_callback.as_ref().unchecked_ref()).unwrap();
+        body.add_event_listener_with_callback("transitionend", transitionend_callback.as_ref().unchecked_ref()).unwrap();
 
         || {
             let body = gloo::utils::body();
-
-            body.remove_event_listener_with_callback("transitionend", transition_callback.as_ref().unchecked_ref()).unwrap();
-            drop(transition_callback)
+            body.remove_event_listener_with_callback("transitionend", transitionend_callback.as_ref().unchecked_ref()).unwrap();
+            drop(transitionend_callback)
         }
     });
 
     // use_state() hook is used to trigger a re-render whenever the `New Game` button is clicked.
-    // The value is used as a key to each Tile component in order to its `expand-init` animation.
     let new_game = use_state(|| 0);
     let new_game_render = *new_game.clone();
-    let new_game_callback = new_game_callback(new_game.clone(), re_render_tx);
+    let new_game_callback = new_game_callback(new_game.clone());
     let keep_playing_callback = keep_playing_callback(keep_playing_clone);
     let placeholder_callback = Callback::from(|_| {});
 

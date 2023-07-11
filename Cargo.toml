@@ -17,4 +17,5 @@ hex_color = "2.0.0"
 wasm-bindgen-futures = "0.4.37"
 tokio = { version="1.29.0", features = ["sync", "rt"] }
 lazy_static = "1.4.0"
+instant = { version = "0.1", features = [ "wasm-bindgen" ] }
 

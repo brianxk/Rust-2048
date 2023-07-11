@@ -2,6 +2,8 @@ use rand::{distributions::WeightedIndex, prelude::Distribution, seq::SliceRandom
 use std::collections::LinkedList;
 use hex_color::HexColor;
 
+mod counted_channel;
+
 pub const BOARD_DIMENSION: usize = 4;
 const NUM_TILES: usize = BOARD_DIMENSION * BOARD_DIMENSION;
 
