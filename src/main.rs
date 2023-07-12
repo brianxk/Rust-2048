@@ -20,8 +20,9 @@ const TILE_DIMENSION: u16 = 120;
 const COLORS: Colors = Colors::new();
 
 // Durations in milliseconds.
-const DEFAULT_SLIDE_DURATION: u64 = 120;
+const DEFAULT_SLIDE_DURATION: u64 = 110;
 const DEFAULT_EXPAND_DURATION: u64 = 110;
+const DEFAULT_INIT_DURATION: u64 = 110;
 // const DEFAULT_SLIDE_DURATION: u64 = 1000;
 // const DEFAULT_EXPAND_DURATION: u64 = 1000;
 
@@ -71,7 +72,8 @@ struct TileProps {
 
 #[function_component(Tile)]
 fn tile(props: &TileProps) -> Html {
-    let expand_init_animation = format!("expand-init {}ms ease-in-out;", CURRENT_EXPAND_DURATION.lock().unwrap());
+    // let expand_init_animation = format!("expand-init {}ms ease-in-out;", CURRENT_EXPAND_DURATION.lock().unwrap());
+    let expand_init_animation = format!("expand-init {}ms ease-in-out;", DEFAULT_INIT_DURATION);
     let style_args = format!("top: {}px; left: {}px; background-color: {}; color: {}; font-size: {}; animation: {};", 
                            props.top_offset,
                            props.left_offset,
@@ -148,7 +150,8 @@ fn add_tile(game_tile: &rust_2048::Tile) {
     let (top_offset, left_offset) = convert_to_pixels(game_tile.row, game_tile.col);
 
     let font_size = compute_font_size(&game_tile.value.to_string());
-    let expand_init_animation = format!("expand-init {}ms ease-out;", CURRENT_EXPAND_DURATION.lock().unwrap());
+    // let expand_init_animation = format!("expand-init {}ms ease-out;", CURRENT_EXPAND_DURATION.lock().unwrap());
+    let expand_init_animation = format!("expand-init {}ms ease-out;", DEFAULT_INIT_DURATION);
 
     let style_args = format!("top: {}px; left: {}px; background-color: {}; color: {}; font-size: {}; animation: {};",
        top_offset,
@@ -244,7 +247,7 @@ fn slide_tile(html_tile: &HtmlElement, game_tile: &rust_2048::Tile, slide_durati
     html_tile.style().set_property("--new_top", &new_top_offset).unwrap();
     html_tile.style().set_property("--new_left", &new_left_offset).unwrap();
 
-    let sliding_animation = format!("sliding {}ms ease-in-out forwards", slide_duration);
+    let sliding_animation = format!("sliding {}ms ease-in forwards", slide_duration);
 
     if let Some(_) = &game_tile.merged {
         // Tiles with the --merged_value property set will be marked for the merging animation
@@ -554,9 +557,8 @@ fn increment_counter(input_counter: Arc<AtomicU16>) {
 }
 
 fn decrement_counter(input_counter: Arc<AtomicU16>) {
-    log!("Decrementing", input_counter.load(Ordering::SeqCst));
+    // log!("Decrementing", input_counter.load(Ordering::SeqCst));
     input_counter.fetch_sub(1, Ordering::SeqCst);
-    log!("New", input_counter.load(Ordering::SeqCst));
 }
 
 #[function_component(Content)]

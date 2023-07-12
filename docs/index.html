@@ -1,5 +1,5 @@
 <!DOCTYPE html><html lang="en"><head>
-        <link rel="stylesheet" href="/rust-2048/style-9483efedc626c18d.css">
+        <link rel="stylesheet" href="/rust-2048/style-3ab2782552261b45.css">
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
         <link href="https://fonts.googleapis.com/css2?family=Cutive+Mono&amp;family=Monofett&amp;family=Roboto+Serif:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&amp;display=swap" rel="stylesheet">
@@ -7,37 +7,10 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Rust 2048</title>
     
-<link rel="preload" href="/rust-2048/rust-2048-cba5327f9c4a3321_bg.wasm" as="fetch" type="application/wasm" crossorigin="">
-<link rel="modulepreload" href="/rust-2048/rust-2048-cba5327f9c4a3321.js"></head>
+<link rel="preload" href="/rust-2048/rust-2048-e559b6b341b45c79_bg.wasm" as="fetch" type="application/wasm" crossorigin="">
+<link rel="modulepreload" href="/rust-2048/rust-2048-e559b6b341b45c79.js"></head>
     <body>
     
 
 
-<script type="module">import init from '/rust-2048/rust-2048-cba5327f9c4a3321.js';init('/rust-2048/rust-2048-cba5327f9c4a3321_bg.wasm');</script><script>(function () {
-    var protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    var url = protocol + '//' + window.location.host + '/_trunk/ws';
-    var poll_interval = 5000;
-    var reload_upon_connect = () => {
-        window.setTimeout(
-            () => {
-                // when we successfully reconnect, we'll force a
-                // reload (since we presumably lost connection to
-                // trunk due to it being killed, so it will have
-                // rebuilt on restart)
-                var ws = new WebSocket(url);
-                ws.onopen = () => window.location.reload();
-                ws.onclose = reload_upon_connect;
-            },
-            poll_interval);
-    };
-
-    var ws = new WebSocket(url);
-    ws.onmessage = (ev) => {
-        const msg = JSON.parse(ev.data);
-        if (msg.reload) {
-            window.location.reload();
-        }
-    };
-    ws.onclose = reload_upon_connect;
-})()
-</script></body></html>
+<script type="module">import init from '/rust-2048/rust-2048-e559b6b341b45c79.js';init('/rust-2048/rust-2048-e559b6b341b45c79_bg.wasm');</script></body></html>
