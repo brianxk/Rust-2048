@@ -341,8 +341,6 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
                 // if true || game_won {
                     document.remove_event_listener_with_callback("keydown", Closure::as_ref(&keydown_handler).unchecked_ref()).unwrap();
 
-                    // log!("Inputs remaining:", input_counter.load(Ordering::SeqCst));
-
                     loop {
                         decrement_counter(input_counter.clone());
                         if input_counter.load(Ordering::SeqCst) == 0 || !matches!(keydown_rx.recv().await, Some(_)) {
@@ -351,6 +349,7 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
                     }
 
                     handle_game_over(game_won, keydown_handler.clone());
+                    continue
                 }
             },
             InputResult::Err(InvalidMove) => (),
@@ -555,8 +554,9 @@ fn increment_counter(input_counter: Arc<AtomicU16>) {
 }
 
 fn decrement_counter(input_counter: Arc<AtomicU16>) {
-    // log!("Decrementing", input_counter.load(Ordering::SeqCst));
+    log!("Decrementing", input_counter.load(Ordering::SeqCst));
     input_counter.fetch_sub(1, Ordering::SeqCst);
+    log!("New", input_counter.load(Ordering::SeqCst));
 }
 
 #[function_component(Content)]
