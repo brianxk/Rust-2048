@@ -20,9 +20,9 @@ const TILE_DIMENSION: u16 = 120;
 const COLORS: Colors = Colors::new();
 
 // Durations in milliseconds.
-const DEFAULT_SLIDE_DURATION: u64 = 100;
+const DEFAULT_SLIDE_DURATION: u64 = 110;
 const DEFAULT_EXPAND_DURATION: u64 = 110;
-const DEFAULT_INIT_DURATION: u64 = 120;
+const DEFAULT_INIT_DURATION: u64 = 110;
 // const DEFAULT_SLIDE_DURATION: u64 = 1000;
 // const DEFAULT_EXPAND_DURATION: u64 = 1000;
 
