@@ -321,11 +321,13 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
                         
                         let num_elements_slide = node_list.length() as u16;
                         let (removed_ids, num_merged) = slide_tiles(node_list, &tiles);
-                        animationend_rx.recv_qty(num_elements_slide).await;
 
                         if input_counter.load(Ordering::SeqCst) == 1 {
                             set_animation_duration(AnimationType::Expanding, false);
                         }
+
+                        animationend_rx.recv_qty(num_elements_slide).await;
+
 
                         remove_tiles(removed_ids);
                         add_tile(get_tile_by_id(&tiles, new_tile_id).expect("Failed to find new Tile."));
