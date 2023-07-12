@@ -22,14 +22,14 @@ const COLORS: Colors = Colors::new();
 // Durations in milliseconds.
 const DEFAULT_SLIDE_DURATION: u64 = 120;
 const DEFAULT_EXPAND_DURATION: u64 = 110;
-const DEFAULT_SLEEP_DURATION: u64 = 1;
+// const DEFAULT_SLIDE_DURATION: u64 = 1000;
+// const DEFAULT_EXPAND_DURATION: u64 = 1000;
 
 // Globally mutable variables. If the number of player moves in the queue is greater than 1, all
 // animation durations will be set to 0. Otherwise the original values will be restored.
 lazy_static! {
     static ref CURRENT_SLIDE_DURATION: Mutex<u64> = Mutex::new(DEFAULT_SLIDE_DURATION);
     static ref CURRENT_EXPAND_DURATION: Mutex<u64> = Mutex::new(DEFAULT_EXPAND_DURATION);
-    static ref CURRENT_SLEEP_DURATION: Mutex<u64> = Mutex::new(DEFAULT_SLEEP_DURATION);
 }
 
 #[wasm_bindgen(module = "/prevent_arrow_scrolling.js")]
@@ -127,8 +127,9 @@ fn remove_tile(id: usize) {
     let id = convert_id_unicode(&id.to_string());
 
     let removed_tile_node = document.query_selector(&id).unwrap().unwrap();
-    let parent_node = removed_tile_node.parent_node().unwrap();
-    parent_node.remove_child(&removed_tile_node).unwrap();
+    let removed_tile_element = removed_tile_node.dyn_ref::<Element>().unwrap();
+
+    removed_tile_element.remove();
 }
 
 fn update_score(new_score: u32) {
@@ -225,7 +226,7 @@ fn expand_tile(html_tile: &HtmlElement) {
     re_append(html_tile);
 }
 
-fn slide_tile(html_tile: &HtmlElement, game_tile: &rust_2048::Tile) {
+fn slide_tile(html_tile: &HtmlElement, game_tile: &rust_2048::Tile, slide_duration: u64) {
     // Obtain current top and left offsets.
     let computed_style = window().unwrap().get_computed_style(&html_tile).unwrap().unwrap();
     let current_top_offset = computed_style.get_property_value("top").unwrap();
@@ -243,7 +244,7 @@ fn slide_tile(html_tile: &HtmlElement, game_tile: &rust_2048::Tile) {
     html_tile.style().set_property("--new_top", &new_top_offset).unwrap();
     html_tile.style().set_property("--new_left", &new_left_offset).unwrap();
 
-    let sliding_animation = format!("sliding {}ms ease-in-out forwards", CURRENT_SLIDE_DURATION.lock().unwrap());
+    let sliding_animation = format!("sliding {}ms ease-in-out forwards", slide_duration);
 
     if let Some(_) = &game_tile.merged {
         // Tiles with the --merged_value property set will be marked for the merging animation
@@ -267,6 +268,8 @@ fn slide_tiles(node_list: web_sys::NodeList, tiles: &Vec<&rust_2048::Tile>) -> (
     let mut removed_ids = Vec::new();
     let mut num_merged = 0;
 
+    let slide_duration = *CURRENT_SLIDE_DURATION.lock().unwrap();
+
     for i in 0..node_list.length() {
         let node = node_list.get(i).unwrap();
         let html_tile = node.dyn_ref::<HtmlElement>().unwrap();
@@ -285,13 +288,13 @@ fn slide_tiles(node_list: web_sys::NodeList, tiles: &Vec<&rust_2048::Tile>) -> (
                 let removed_html_node = document.query_selector(&convert_id_unicode(&removed_tile.id.to_string())).unwrap().unwrap();
                 let removed_html_tile = removed_html_node.dyn_ref::<HtmlElement>().unwrap();
 
-                slide_tile(removed_html_tile, removed_tile);
+                slide_tile(removed_html_tile, removed_tile, slide_duration);
 
                 // Mark this tile for removal from the frontend.
                 html_tile.style().set_property("--remove_id", &removed_tile.id.to_string()).unwrap();
             }
 
-            slide_tile(html_tile, updated_tile);
+            slide_tile(html_tile, updated_tile, slide_duration);
         }
     }
 
@@ -306,27 +309,27 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
         match game_state_mut.receive_input(&key_code) {
             InputResult::Ok(new_tile_id, tiles, game_won) => {
                 let document = gloo::utils::document();
-
+                
                 match document.query_selector_all("[class='tile cell']") {
                     Ok(node_list) => {
                         // let mut now = instant::Instant::now();
-                        let num_elements_slide = node_list.length() as u16;
+                        // log!(format!("{:?}", instant::Instant::now() - now));
+
+                        if input_counter.load(Ordering::SeqCst) == 1 {
+                            set_animation_duration(AnimationType::Sliding, false);
+                        }
                         
-                        set_animation_durations(input_counter.clone(), 1);
+                        let num_elements_slide = node_list.length() as u16;
                         let (removed_ids, num_merged) = slide_tiles(node_list, &tiles);
                         animationend_rx.recv_qty(num_elements_slide).await;
+
+                        if input_counter.load(Ordering::SeqCst) == 1 {
+                            set_animation_duration(AnimationType::Expanding, false);
+                        }
+
                         remove_tiles(removed_ids);
-
-                        // log!(format!("{:?}", instant::Instant::now() - now));
-
-                        decrement_counter(input_counter.clone());
-                        set_animation_durations(input_counter.clone(), 0);
-
-                        // now = instant::Instant::now();
                         add_tile(get_tile_by_id(&tiles, new_tile_id).expect("Failed to find new Tile."));
                         animationend_rx.recv_qty(num_merged).await;
-                        // log!(format!("{:?}", instant::Instant::now() - now));
-
                         update_score(game_state_mut.score);
                     },
                     Err(_) => log!("NodeList could not be found."),
@@ -336,43 +339,74 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
                 // if true || game_won {
                     document.remove_event_listener_with_callback("keydown", Closure::as_ref(&keydown_handler).unchecked_ref()).unwrap();
 
-                    log!("Inputs remaining:", input_counter.load(Ordering::SeqCst));
+                    // log!("Inputs remaining:", input_counter.load(Ordering::SeqCst));
 
-                    while input_counter.load(Ordering::SeqCst) > 0 && matches!(keydown_rx.recv().await, Some(_)) {
+                    loop {
                         decrement_counter(input_counter.clone());
+                        if input_counter.load(Ordering::SeqCst) == 0 || !matches!(keydown_rx.recv().await, Some(_)) {
+                            break
+                        }
                     }
 
                     handle_game_over(game_won, keydown_handler.clone());
                 }
             },
-            InputResult::Err(InvalidMove) => {
-                decrement_counter(input_counter.clone());
-            },
+            InputResult::Err(InvalidMove) => (),
         }
+
+        decrement_counter(input_counter.clone());
     }
 }
 
-fn set_animation_durations(input_counter: Arc<AtomicU16>, threshold: u16) {
-    let enqueued_keystrokes = input_counter.load(Ordering::SeqCst);
+enum AnimationType {
+    Sliding,
+    Expanding,
+}
 
-    let mut slide_duration = DEFAULT_SLIDE_DURATION;
-    let mut expand_duration = DEFAULT_EXPAND_DURATION;
+fn set_animation_duration(animation_name: AnimationType, set_instant: bool) {
+    match animation_name {
+        AnimationType::Sliding => {
+            let mut slide_duration = DEFAULT_SLIDE_DURATION;
 
-    // if enqueued_keystrokes > 1 {
-    //     slide_duration /= enqueued_keystrokes as u64;
-    //     expand_duration /= enqueued_keystrokes as u64;
-    // } else 
-    if enqueued_keystrokes > threshold {
-        slide_duration = 0;
-        expand_duration = 0;
+            if set_instant {
+                slide_duration = 0;
+            }
+
+            *CURRENT_SLIDE_DURATION.lock().unwrap() = slide_duration;
+        },
+        AnimationType::Expanding => {
+            let mut expand_duration = DEFAULT_EXPAND_DURATION;
+
+            if set_instant {
+                expand_duration = 0;
+            }
+
+            *CURRENT_EXPAND_DURATION.lock().unwrap() = expand_duration;
+
+        },
     }
+}
 
-    *CURRENT_SLIDE_DURATION.lock().unwrap() = slide_duration;
-    *CURRENT_EXPAND_DURATION.lock().unwrap() = expand_duration;
+fn playback_scaling_factor(played_percentage: f64) -> f64 {
+    let scaling_factor = 5.0;
+
+    scaling_factor - (scaling_factor - 1.0) * played_percentage
 }
 
 fn interrupt_playback_rate(input_counter: Arc<AtomicU16>) {
     let document = gloo::utils::document();
+
+    let num_inputs = input_counter.load(Ordering::SeqCst);
+
+    if num_inputs == 1 {
+        set_animation_duration(AnimationType::Sliding, false);
+        set_animation_duration(AnimationType::Expanding, false);
+
+        return
+    } else if num_inputs > 2 {
+        set_animation_duration(AnimationType::Sliding, true);
+        set_animation_duration(AnimationType::Expanding, true);
+    }
 
     match document.query_selector_all("[class='tile cell']") {
         Ok(node_list) => {
@@ -384,17 +418,33 @@ fn interrupt_playback_rate(input_counter: Arc<AtomicU16>) {
 
                 for animation in animations {
                     let animation = CssAnimation::from(animation);
-                    let current_time = animation.current_time();
 
-                    log!(current_time);
+                    let animation_type = 
+                        if animation.animation_name() == "sliding" {
+                            AnimationType::Sliding
+                        } else {
+                            AnimationType::Expanding
+                        };
 
-                    if input_counter.load(Ordering::SeqCst) > 1 {
-                        animation.set_playback_rate(5.0);
+                    let current_time = animation.current_time().unwrap();
+
+                    match &animation_type { 
+                        AnimationType::Sliding => {
+                            let played_percentage = current_time / DEFAULT_SLIDE_DURATION as f64;
+                            let new_playback_rate = playback_scaling_factor(played_percentage);
+
+                            // log!(new_playback_rate);
+                            animation.update_playback_rate(new_playback_rate);
+                            set_animation_duration(AnimationType::Expanding, true);
+                        },
+                        AnimationType::Expanding => {
+                            // animation.finish();
+                            let played_percentage = current_time / DEFAULT_EXPAND_DURATION as f64;
+                            let new_playback_rate = playback_scaling_factor(played_percentage);
+
+                            animation.update_playback_rate(new_playback_rate);
+                        },
                     }
-
-                    // let animation_name = animation.animation_name();
-                    // let playback_rate = animation.playback_rate();
-                    // log!(animation_name, playback_rate);
                 }
             }
         },
