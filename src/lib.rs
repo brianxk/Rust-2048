@@ -125,7 +125,7 @@ impl Game {
     /// This means that the board will be empty save for two starting tiles.
     ///
     /// The two tiles will either both be 2's or one 2 and one 4, always in random positions.
-    const WINNING_TILE: u32 = 8;
+    const WINNING_TILE: u32 = 2048;
 
     pub fn new() -> Game {
         const EMPTY_TILE: Option<Tile> = None;
