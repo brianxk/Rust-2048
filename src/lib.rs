@@ -7,16 +7,6 @@ mod counted_channel;
 pub const BOARD_DIMENSION: usize = 4;
 const NUM_TILES: usize = BOARD_DIMENSION * BOARD_DIMENSION;
 
-// TODO:
-// 21072
-// 0. Disable remaining keyboard inputs on new game.
-// 1. Update project description with link to game.
-// 2. Acknowledgements.
-// 3. Include link to source code.
-// 4. Score update animation.
-// 5. Tiles glowing with greater numbers.
-// 6. adjusting animation speed according to screen width.
-
 #[derive(PartialEq, Clone)]
 pub struct Tile {
     pub value: u32,
@@ -135,7 +125,7 @@ impl Game {
     /// This means that the board will be empty save for two starting tiles.
     ///
     /// The two tiles will either both be 2's or one 2 and one 4, always in random positions.
-    const WINNING_TILE: u32 = 2048;
+    const WINNING_TILE: u32 = 8;
 
     pub fn new() -> Game {
         const EMPTY_TILE: Option<Tile> = None;
