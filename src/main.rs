@@ -37,6 +37,11 @@ lazy_static! {
     static ref Y_DOWN: Mutex<Option<i32>> = Mutex::new(None);
 }
 
+#[wasm_bindgen(module = "/prevent_arrow_scrolling.js")]
+extern "C" {
+    fn preventDefaultScrolling();
+}
+
 #[function_component(GameBoard)]
 fn game_board() -> Html {
     let table_style = format!("--table_background: {};", COLORS.board);
@@ -481,37 +486,35 @@ fn produce_input_handler(keydown_tx: UnboundedSender<String>, input_counter: Arc
                 let y_down = *Y_DOWN.lock().unwrap();
 
                 if let (Some(x_down), Some(y_down)) = (x_down, y_down) {
-                    let touches = event.dyn_ref::<TouchEvent>().expect("1").changed_touches().get(0).expect("2");
+                    let touches = event.dyn_ref::<TouchEvent>().unwrap().touches();
+                    if touches.length() <= 1 {
+                        let changed_touches = event.dyn_ref::<TouchEvent>().unwrap().changed_touches().get(0).unwrap();
 
-                    let x_up = touches.client_x();
-                    let y_up = touches.client_y();
+                        let x_up = changed_touches.client_x();
+                        let y_up = changed_touches.client_y();
 
-                    // log!("x_down:", x_down);
-                    // log!("y_down:", y_down);
-                    // log!("x_up:", x_up);
-                    // log!("y_up:", y_up);
+                        let x_diff = x_up - x_down;
+                        let y_diff = y_up - y_down;
 
-                    let x_diff = x_up - x_down;
-                    let y_diff = y_up - y_down;
-
-                    // Determine most significant direction of movement.
-                    if x_diff.abs() > y_diff.abs() {
-                        if x_diff > 0 {
-                            key_code = String::from("ArrowRight");
+                        // Determine most significant direction of movement.
+                        if x_diff.abs() > y_diff.abs() {
+                            if x_diff > 0 {
+                                key_code = String::from("ArrowRight");
+                            } else {
+                                key_code = String::from("ArrowLeft");
+                            }
                         } else {
-                            key_code = String::from("ArrowLeft");
+                            if y_diff > 0 {
+                                key_code = String::from("ArrowDown");
+                            } else {
+                                key_code = String::from("ArrowUp");
+                            }
                         }
-                    } else {
-                        if y_diff > 0 {
-                            key_code = String::from("ArrowDown");
-                        } else {
-                            key_code = String::from("ArrowUp");
-                        }
+
+                        // Reset touchstart values.
+                        *X_DOWN.lock().unwrap() = None;
+                        *Y_DOWN.lock().unwrap() = None;
                     }
-
-                    // Reset touchstart values.
-                    *X_DOWN.lock().unwrap() = None;
-                    *Y_DOWN.lock().unwrap() = None;
                 }
             } 
 
@@ -620,6 +623,9 @@ fn decrement_counter(input_counter: Arc<AtomicU16>) {
 
 #[function_component(Content)]
 fn content() -> Html {
+    // Prevents use of arrow keys for scrolling the page
+    preventDefaultScrolling();
+
     let game_state = Rc::new(RefCell::new(Game::new()));
     let game_state_for_move_processor = Rc::clone(&game_state);
  
