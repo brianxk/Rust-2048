@@ -487,7 +487,7 @@ fn produce_input_handler(keydown_tx: UnboundedSender<String>, input_counter: Arc
 
                 if let (Some(x_down), Some(y_down)) = (x_down, y_down) {
                     let touches = event.dyn_ref::<TouchEvent>().unwrap().touches();
-                    if touches.length() <= 1 {
+                    if touches.length() == 0 {
                         let changed_touches = event.dyn_ref::<TouchEvent>().unwrap().changed_touches().get(0).unwrap();
 
                         let x_up = changed_touches.client_x();
