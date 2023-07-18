@@ -643,15 +643,15 @@ fn content() -> Html {
     use_effect(move || {
         let document = gloo::utils::document();
         document.add_event_listener_with_callback("keydown", Closure::as_ref(&input_handler).unchecked_ref()).unwrap();
-        document.add_event_listener_with_callback("touchstart", Closure::as_ref(&input_handler).unchecked_ref()).unwrap();
-        document.add_event_listener_with_callback("touchend", Closure::as_ref(&input_handler).unchecked_ref()).unwrap();
+        document.add_event_listener_with_callback_and_bool("touchstart", Closure::as_ref(&input_handler).unchecked_ref(), false).unwrap();
+        document.add_event_listener_with_callback_and_bool("touchend", Closure::as_ref(&input_handler).unchecked_ref(), false).unwrap();
 
 
         || {
             let document = gloo::utils::document();
             document.remove_event_listener_with_callback("keydown", Closure::as_ref(&input_handler).unchecked_ref()).unwrap();
-            document.remove_event_listener_with_callback("touchstart", Closure::as_ref(&input_handler).unchecked_ref()).unwrap();
-            document.remove_event_listener_with_callback("touchend", Closure::as_ref(&input_handler).unchecked_ref()).unwrap();
+            document.remove_event_listener_with_callback_and_bool("touchstart", Closure::as_ref(&input_handler).unchecked_ref(), false).unwrap();
+            document.remove_event_listener_with_callback_and_bool("touchend", Closure::as_ref(&input_handler).unchecked_ref(), false).unwrap();
             drop(input_handler)
         }
     });
