@@ -458,12 +458,14 @@ fn produce_input_handler(keydown_tx: UnboundedSender<String>, input_counter: Arc
     Box::new(move |event: Event| {
         let event_type = event.type_();
 
-        event.prevent_default();
+        let document = gloo::utils::document();
+        let board_container = document.query_selector(".board-container").unwrap().unwrap();
+
+        if board_container.contains(event.target().as_ref().map(|t| t.dyn_ref::<Node>().unwrap())) {
+            event.prevent_default();
+        }
 
         if event_type == "touchstart" {
-            let document = gloo::utils::document();
-            let board_container = document.query_selector(".board-container").unwrap().unwrap();
-
             if board_container.contains(event.target().as_ref().map(|t| t.dyn_ref::<Node>().unwrap())) {
                 let touches = event.dyn_ref::<TouchEvent>().unwrap().touches().get(0).unwrap();
                 *X_DOWN.lock().unwrap() = Some(touches.client_x());
