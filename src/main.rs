@@ -466,9 +466,9 @@ fn produce_input_handler(keydown_tx: UnboundedSender<String>, input_counter: Arc
         let document = gloo::utils::document();
         let board_container = document.query_selector(".board-container").unwrap().unwrap();
 
-        if board_container.contains(event.target().as_ref().map(|t| t.dyn_ref::<Node>().unwrap())) {
-            event.prevent_default();
-        }
+        // if board_container.contains(event.target().as_ref().map(|t| t.dyn_ref::<Node>().unwrap())) {
+        //     event.prevent_default();
+        // }
 
         if event_type == "touchstart" {
             if board_container.contains(event.target().as_ref().map(|t| t.dyn_ref::<Node>().unwrap())) {

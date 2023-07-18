@@ -13,6 +13,7 @@ html, body {
     background-image: linear-gradient(var(--gradient_top), var(--gradient_bot));
     background-repeat: no-repeat;
     background-attachment: fixed;
+    overflow-y: hidden; /* Prevent pull-to-refresh on mobile. */
 }
 
 body > * {
