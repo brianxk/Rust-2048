@@ -11,7 +11,7 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::{JsCast, closure::Closure};
 use wasm_bindgen_futures::spawn_local;
-use web_sys::{HtmlElement, window, CssAnimation, Element, Node};
+use web_sys::{HtmlElement, window, CssAnimation, Element, Node, AddEventListenerOptions};
 use yew::prelude::*;
 mod counted_channel;
 
@@ -35,11 +35,6 @@ lazy_static! {
     // For storing touch coordinates whenever a touchstart event is registered.
     static ref X_DOWN: Mutex<Option<i32>> = Mutex::new(None);
     static ref Y_DOWN: Mutex<Option<i32>> = Mutex::new(None);
-}
-
-#[wasm_bindgen(module = "/prevent_arrow_scrolling.js")]
-extern "C" {
-    fn preventDefaultScrolling();
 }
 
 #[function_component(GameBoard)]
@@ -463,6 +458,8 @@ fn produce_input_handler(keydown_tx: UnboundedSender<String>, input_counter: Arc
     Box::new(move |event: Event| {
         let event_type = event.type_();
 
+        event.prevent_default();
+
         if event_type == "touchstart" {
             let document = gloo::utils::document();
             let board_container = document.query_selector(".board-container").unwrap().unwrap();
@@ -624,9 +621,6 @@ fn content() -> Html {
     let game_state = Rc::new(RefCell::new(Game::new()));
     let game_state_for_move_processor = Rc::clone(&game_state);
  
-    // Prevents use of arrow keys for scrolling the page
-    preventDefaultScrolling();
-
     // Attach a keydown event listener to the document.
     let (keydown_tx, keydown_rx) = mpsc::unbounded_channel();
     let input_counter = Arc::new(AtomicU16::new(0));
@@ -642,16 +636,19 @@ fn content() -> Html {
 
     use_effect(move || {
         let document = gloo::utils::document();
+        let mut options = AddEventListenerOptions::new();
+        options.passive(false);
+
         document.add_event_listener_with_callback("keydown", Closure::as_ref(&input_handler).unchecked_ref()).unwrap();
-        document.add_event_listener_with_callback_and_bool("touchstart", Closure::as_ref(&input_handler).unchecked_ref(), false).unwrap();
-        document.add_event_listener_with_callback_and_bool("touchend", Closure::as_ref(&input_handler).unchecked_ref(), false).unwrap();
+        document.add_event_listener_with_callback_and_add_event_listener_options("touchstart", Closure::as_ref(&input_handler).unchecked_ref(), &options).unwrap();
+        document.add_event_listener_with_callback_and_add_event_listener_options("touchend", Closure::as_ref(&input_handler).unchecked_ref(), &options).unwrap();
 
 
         || {
             let document = gloo::utils::document();
             document.remove_event_listener_with_callback("keydown", Closure::as_ref(&input_handler).unchecked_ref()).unwrap();
-            document.remove_event_listener_with_callback_and_bool("touchstart", Closure::as_ref(&input_handler).unchecked_ref(), false).unwrap();
-            document.remove_event_listener_with_callback_and_bool("touchend", Closure::as_ref(&input_handler).unchecked_ref(), false).unwrap();
+            document.remove_event_listener_with_callback("touchstart", Closure::as_ref(&input_handler).unchecked_ref()).unwrap();
+            document.remove_event_listener_with_callback("touchend", Closure::as_ref(&input_handler).unchecked_ref()).unwrap();
             drop(input_handler)
         }
     });
