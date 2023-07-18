@@ -26,11 +26,15 @@ const DEFAULT_INIT_DURATION: u64 = 110;
 // const DEFAULT_SLIDE_DURATION: u64 = 1000;
 // const DEFAULT_EXPAND_DURATION: u64 = 1000;
 
-// Globally mutable variables. If the number of player moves in the queue is greater than 1, all
-// animation durations will be set to 0. Otherwise the original values will be restored.
+// Globally mutable variables. 
 lazy_static! {
+    // Animation speeds adapt to the number of user inputs.
     static ref CURRENT_SLIDE_DURATION: Mutex<u64> = Mutex::new(DEFAULT_SLIDE_DURATION);
     static ref CURRENT_EXPAND_DURATION: Mutex<u64> = Mutex::new(DEFAULT_EXPAND_DURATION);
+
+    // For storing touch coordinates whenever a touchstart event is registered.
+    static ref X_DOWN: Mutex<Option<i32>> = Mutex::new(None);
+    static ref Y_DOWN: Mutex<Option<i32>> = Mutex::new(None);
 }
 
 #[wasm_bindgen(module = "/prevent_arrow_scrolling.js")]
@@ -90,10 +94,9 @@ fn tile(props: &TileProps) -> Html {
     }
 }
 
-fn handle_game_over(game_won: bool, keydown_handler: Arc<Closure<dyn FnMut(yew::KeyboardEvent)>>) {
+fn handle_game_over(game_won: bool) {
     // Disable keyboard events when game is over.
     let document = gloo::utils::document();
-    document.remove_event_listener_with_callback("keydown", Closure::as_ref(&keydown_handler).unchecked_ref()).unwrap();
 
     let mut game_over_type = ".gameover".to_string();
 
@@ -304,7 +307,7 @@ fn slide_tiles(node_list: web_sys::NodeList, tiles: &Vec<&rust_2048::Tile>) -> (
     (removed_ids, num_merged)
 }
 
-async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx: UnboundedReceiver<String>, mut animationend_rx: counted_channel::CountedReceiver, input_counter: Arc<AtomicU16>, keydown_handler: Arc<Closure<dyn FnMut(yew::KeyboardEvent)>>) {
+async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx: UnboundedReceiver<String>, mut animationend_rx: counted_channel::CountedReceiver, input_counter: Arc<AtomicU16>, input_handler: Arc<Closure<dyn FnMut(yew::Event)>>) {
     let game_state_mut = game_state.clone();
     let mut game_state_mut = game_state_mut.borrow_mut();
 
@@ -342,7 +345,7 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
 
                 if game_state_mut.game_over() || game_won {
                 // if true || game_won {
-                    document.remove_event_listener_with_callback("keydown", Closure::as_ref(&keydown_handler).unchecked_ref()).unwrap();
+                    document.remove_event_listener_with_callback("keydown", Closure::as_ref(&input_handler).unchecked_ref()).unwrap();
 
                     loop {
                         decrement_counter(input_counter.clone());
@@ -351,7 +354,7 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
                         }
                     }
 
-                    handle_game_over(game_won, keydown_handler.clone());
+                    handle_game_over(game_won);
                     continue
                 }
             },
@@ -456,20 +459,35 @@ fn interrupt_playback_rate(input_counter: Arc<AtomicU16>) {
     }
 }
 
-fn produce_keydown_handler(keydown_tx: UnboundedSender<String>, input_counter: Arc<AtomicU16>) -> Box<dyn FnMut(KeyboardEvent) -> ()> {
-    Box::new(move |event: KeyboardEvent| {
-        let key_code = event.code();
+fn produce_input_handler(keydown_tx: UnboundedSender<String>, input_counter: Arc<AtomicU16>) -> Box<dyn FnMut(Event) -> ()> {
+    Box::new(move |event: Event| {
+        let event_type = event.type_();
+        let key_code;
+
+        if event_type == "keydown" {
+            key_code = event.dyn_ref::<KeyboardEvent>().unwrap().code();
+        } else if event_type == "touchstart" {
+            let touches = event.dyn_ref::<TouchEvent>().unwrap().touches().get(0).unwrap();
+
+            *X_DOWN.lock().unwrap() = Some(touches.client_x());
+            *Y_DOWN.lock().unwrap() = Some(touches.client_y());
+
+            key_code = String::from("ArrowUp");
+        } else {
+            unreachable!()
+        }
+
         increment_counter(input_counter.clone());
         interrupt_playback_rate(input_counter.clone());
         keydown_tx.send(key_code).expect("Sending key_code failed.");
     })
 }
 
-fn keep_playing_callback(keydown_handler: Arc<Closure<dyn FnMut(yew::KeyboardEvent)>>) -> Callback<MouseEvent> {
+fn keep_playing_callback(input_handler: Arc<Closure<dyn FnMut(yew::Event)>>) -> Callback<MouseEvent> {
     Callback::from(move |_| {
         // Re-enable keyboard events.
         let document = gloo::utils::document();
-        document.add_event_listener_with_callback("keydown", Closure::as_ref(&keydown_handler).unchecked_ref()).unwrap();
+        document.add_event_listener_with_callback("keydown", Closure::as_ref(&input_handler).unchecked_ref()).unwrap();
 
         // Remove gameover layer.
         let gameover_layer = document.query_selector(".gameover.won").unwrap().unwrap();
@@ -573,28 +591,26 @@ fn content() -> Html {
     let (keydown_tx, keydown_rx) = mpsc::unbounded_channel();
     let input_counter = Arc::new(AtomicU16::new(0));
 
-    let keydown_handler = Arc::new(Closure::wrap(produce_keydown_handler(keydown_tx, input_counter.clone())));
-    let keydown_handler_clone = keydown_handler.clone();
-    let keep_playing_clone = keydown_handler.clone();
+    let input_handler = Arc::new(Closure::wrap(produce_input_handler(keydown_tx, input_counter.clone())));
+    let input_handler_clone = input_handler.clone();
+    let keep_playing_clone = input_handler.clone();
 
     // Channel for animationend events to notify the keydown processor to process the next keystroke.
     let (animationend_tx, animationend_rx) = counted_channel::CountedChannel::new();
 
-    // Channel for communicating to keydown processor that a re-render was triggered and to ignore
-    // all remaining keyboard inputs in queue.
-    // let (re_render_tx, re_render_rx) = mpsc::unbounded_channel();
-
-    spawn_local(process_keydown_messages(game_state_for_move_processor, keydown_rx, animationend_rx, input_counter.clone(), keydown_handler_clone));
+    spawn_local(process_keydown_messages(game_state_for_move_processor, keydown_rx, animationend_rx, input_counter.clone(), input_handler_clone));
 
     use_effect(move || {
         let document = gloo::utils::document();
-        document.add_event_listener_with_callback("keydown", Closure::as_ref(&keydown_handler).unchecked_ref()).unwrap();
+        document.add_event_listener_with_callback("keydown", Closure::as_ref(&input_handler).unchecked_ref()).unwrap();
+        document.add_event_listener_with_callback("touchstart", Closure::as_ref(&input_handler).unchecked_ref()).unwrap();
 
 
         || {
             let document = gloo::utils::document();
-            document.remove_event_listener_with_callback("keydown", Closure::as_ref(&keydown_handler).unchecked_ref()).unwrap();
-            drop(keydown_handler)
+            document.remove_event_listener_with_callback("keydown", Closure::as_ref(&input_handler).unchecked_ref()).unwrap();
+            document.remove_event_listener_with_callback("touchstart", Closure::as_ref(&input_handler).unchecked_ref()).unwrap();
+            drop(input_handler)
         }
     });
 
