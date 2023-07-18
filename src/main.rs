@@ -466,9 +466,9 @@ fn produce_input_handler(keydown_tx: UnboundedSender<String>, input_counter: Arc
         let document = gloo::utils::document();
         let board_container = document.query_selector(".board-container").unwrap().unwrap();
 
-        // if board_container.contains(event.target().as_ref().map(|t| t.dyn_ref::<Node>().unwrap())) {
-        //     event.prevent_default();
-        // }
+        if board_container.contains(event.target().as_ref().map(|t| t.dyn_ref::<Node>().unwrap())) {
+            event.prevent_default();
+        }
 
         if event_type == "touchstart" {
             if board_container.contains(event.target().as_ref().map(|t| t.dyn_ref::<Node>().unwrap())) {
@@ -487,6 +487,7 @@ fn produce_input_handler(keydown_tx: UnboundedSender<String>, input_counter: Arc
 
                 if let (Some(x_down), Some(y_down)) = (x_down, y_down) {
                     let touches = event.dyn_ref::<TouchEvent>().unwrap().touches();
+                    log!("touches.length():", touches.length());
                     if touches.length() == 0 {
                         let changed_touches = event.dyn_ref::<TouchEvent>().unwrap().changed_touches().get(0).unwrap();
 
