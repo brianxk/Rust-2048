@@ -346,6 +346,8 @@ async fn process_keydown_messages(game_state: Rc<RefCell<Game>>, mut keydown_rx:
                 if game_state_mut.game_over() || game_won {
                 // if true || game_won {
                     document.remove_event_listener_with_callback("keydown", Closure::as_ref(&input_handler).unchecked_ref()).unwrap();
+                    document.remove_event_listener_with_callback("touchstart", Closure::as_ref(&input_handler).unchecked_ref()).unwrap();
+                    document.remove_event_listener_with_callback("touchmove", Closure::as_ref(&input_handler).unchecked_ref()).unwrap();
 
                     loop {
                         decrement_counter(input_counter.clone());
@@ -465,6 +467,12 @@ fn produce_input_handler(keydown_tx: UnboundedSender<String>, input_counter: Arc
 
         let document = gloo::utils::document();
         let board_container = document.query_selector(".board-container").unwrap().unwrap();
+
+        let event_target = event.target().unwrap();
+        let event_target_node = event_target.dyn_ref::<HtmlElement>().unwrap();
+        
+        let event_target_class = event_target_node.class_name();
+        log!(event_target_class);
 
         if board_container.contains(event.target().as_ref().map(|t| t.dyn_ref::<Node>().unwrap())) {
             event.prevent_default();
