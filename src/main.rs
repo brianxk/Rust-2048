@@ -473,7 +473,7 @@ fn produce_input_handler(keydown_tx: UnboundedSender<String>, input_counter: Arc
         let event_target_class = event_target_node.class_name();
         
         // if board_container.contains(event.target().as_ref().map(|t| t.dyn_ref::<Node>().unwrap())) {
-        if event_target_class != "metadata" {
+        if board_container.contains(event.target().as_ref().map(|t| t.dyn_ref::<Node>().unwrap())) && event_target_class != "metadata" {
             event.prevent_default();
         }
 
